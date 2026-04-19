@@ -1,4 +1,4 @@
-javascriptconst express = require('express');
+const express = require('express');
 const fetch = require('node-fetch');
 const cors = require('cors');
 
@@ -30,3 +30,4 @@ app.get('/api/*', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('Proxy corriendo en puerto ' + PORT));
+
