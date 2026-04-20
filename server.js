@@ -6,7 +6,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const ACCESS_TOKEN = '6b1cee11a29b10dc8c96f0cd64a437fa6b36a50a';
+const ACCESS_TOKEN = '8c2c0a239d7c4c1003edd283fb8f231e3626b45f';
 const USER_ID = '4969223';
 const BASE = 'https://api.tiendanube.com/v1/' + USER_ID;
 const HEADERS = {
