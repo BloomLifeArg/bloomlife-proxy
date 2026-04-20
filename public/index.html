@@ -74,6 +74,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 </div>
 <script>
 const PROXY = '';
+const PASSWORD = 'bloom2026';
+
+function checkAuth() {
+  if (sessionStorage.getItem('bl_auth') === 'ok') return true;
+  const input = prompt('Ingresá la contraseña para acceder al dashboard:');
+  if (input === PASSWORD) {
+    sessionStorage.setItem('bl_auth', 'ok');
+    return true;
+  }
+  document.getElementById('main').innerHTML = '<div class="error">Contraseña incorrecta. Recargá la página para intentar de nuevo.</div>';
+  return false;
+}
 let CHARTS = {};
 
 function fmt(n){return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(n||0);}
@@ -265,7 +277,7 @@ async function init(){
     document.getElementById('sync-time').textContent='Error de conexión';
   }
 }
-init();
+if (checkAuth()) init();
 </script>
 </body>
 </html>
