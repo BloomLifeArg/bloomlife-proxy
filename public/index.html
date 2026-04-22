@@ -116,6 +116,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .month-tabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:1rem}
 .month-tab{font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid #e0e0db;background:#fff;color:#666;cursor:pointer;font-family:inherit}
 .month-tab.active{background:#1D9E75;color:#fff;border-color:#1D9E75;font-weight:600}
+/* ── INVENTARIO SEMAFORO ── */
+.semaforo{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.semaforo.verde{background:#1D9E75}
+.semaforo.amarillo{background:#EF9F27}
+.semaforo.rojo{background:#D85A30}
+.inv-check{width:16px;height:16px;cursor:pointer}
+/* ── CASH FLOW ── */
+.cf-row{display:flex;align-items:center;justify-content:space-between;padding:9px 16px;background:#fff;font-size:12px;border-bottom:1px solid #f0f0ec}
+.cf-row.in{color:#1D9E75}
+.cf-row.out{color:#D85A30}
+.cf-row.total-row{font-weight:700;font-size:13px;background:#f0fdf8;border:none}
+.cf-row.subtotal{font-weight:600;background:#fafaf8}
+.cf-val{font-weight:600}
 @media(max-width:540px){.grid2{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}.nav-group-label{display:none}.mktg-line{grid-template-columns:1fr 1fr 1fr;}.mktg-line span:first-child{grid-column:1/-1;font-weight:600}}
 </style>
 </head>
@@ -170,12 +183,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="nav-row">
       <span class="nav-group-label">Finanzas</span>
-      <button class="nav-btn" onclick="showSection('finanzas')">P&L</button>
+      <button class="nav-btn" onclick="showSection('finanzas')">P&amp;L</button>
       <button class="nav-btn" onclick="showSection('b2b')">B2B</button>
       <button class="nav-btn" onclick="showSection('gastos')">Gastos</button>
       <button class="nav-btn" onclick="showSection('marketing-plan')">Marketing</button>
       <button class="nav-btn" onclick="showSection('costos')">Costos</button>
       <button class="nav-btn" onclick="showSection('pagos-prov')">Cuentas x pagar</button>
+      <button class="nav-btn" onclick="showSection('inventario')">Inventario</button>
+      <button class="nav-btn" onclick="showSection('cashflow')">Cash Flow</button>
     </div>
   </div>
   <div id="main"><div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div><p style="margin-top:1rem">Conectando con Tienda Nube...</p></div></div>
@@ -186,6 +201,25 @@ const PASSWORD='bloom2026';
 let ALL_ORDERS=[],ALL_PRODUCTS=[],ALL_ABANDONED=[],FILTERED_ORDERS=[];
 let CHARTS={};
 let SELECTED_RECOMPRA_MONTH=null;
+ 
+const TN_PRODUCTS=[
+  'Ashwagandha | Equilibrio Hormonal | Cápsulas',
+  'Ashwagandha | Equilibrio Hormonal | Gummies',
+  'Melena de León | Claridad Mental | Cápsulas',
+  'Melena de León | Claridad Mental | Gummies',
+  'Reishi | Descanso Profundo | Gummies',
+  'Cordyceps | Energía & Performance | Cápsulas',
+  'Cordyceps | Energía & Performance | Gummies',
+  'Magnesio | Gummies',
+  'Tremella | Piel & Hidratación | Cápsulas',
+  'Combo Bye Bye Anxiety | Ashwagandha + Melena de León | Gummies',
+  'Combo Inmune Boost | Reishi + Melena de León | Gummies',
+  'Combo Brain Health Gummies | Suplementación por 3 meses',
+  'Combo Brain Health Cápsulas | Suplementación por 3 meses',
+  'Combo Hormonal Balance – Suplementación con Ashwagandha Gummies por 3 meses.',
+  'Combo Relaxation | Suplementación por 3 meses',
+  'Costo de envío',
+];
  
 const NOMBRES_F=new Set(['maria','ana','laura','carolina','andrea','patricia','claudia','alejandra','gabriela','marcela','silvana','valeria','paula','natalia','veronica','monica','daniela','fernanda','cecilia','florencia','lucia','sofia','valentina','camila','agustina','martina','julieta','melina','sabrina','vanessa','roxana','viviana','norma','beatriz','rosa','isabel','susana','graciela','miriam','nora','alicia','mariana','sandra','jimena','romina','gisela','lorena','karina','paola','noelia','brenda','soledad','celeste','aldana','rocio','micaela','belen','giuliana','antonella','bianca','lourdes','magali','ayelen','estefania','marisol','daiana','yasmin','ruth','elisa','silvia','victoria','dolores','adriana','irene','liliana','rebeca','esperanza','pilar','mercedes','josefina','constanza','emilia','renata','emma','mia','zoe','lara','abril','naomi','stefania','malena','candela','marina','guadalupe','paloma','catalina','alma','clara','nadia','tamara','ivana','cinthia','cintia','eliana','yesica','jessica','barbara','evelyn','maira','gina','fatima','azul','mora','elsa','martha','dora','sara','elena','ines','amalia','herminia','olga','hilda','amanda','stella','ofelia','gladys','mirta','raquel','analia','margarita','estela','griselda','mabel']);
 const NOMBRES_M=new Set(['juan','carlos','luis','jose','jorge','roberto','diego','pablo','daniel','sergio','miguel','alejandro','gabriel','martin','nicolas','andres','gustavo','ricardo','marcelo','alberto','hector','oscar','hernan','mario','raul','fernando','pedro','ariel','leandro','federico','ignacio','maximiliano','sebastian','christian','matias','facundo','ezequiel','rodrigo','joaquin','santiago','franco','gonzalo','walter','hugo','ruben','javier','dante','ramiro','emilio','nahuel','agustin','lucas','tomas','marcos','lautaro','julian','alan','brian','kevin','ivan','enzo','maximo','thiago','benicio','bautista','valentino','gael','luca','benjamin','alexander','alexis','cristian','damian','esteban','francisco','manuel','antonio','eduardo','alfredo','ernesto','horacio','abel','cesar','german','claudio','omar','felix','victor','angel','rafael','luciano','mariano','fabian','david','joel','simon','patricio','augusto','emiliano','leonel','axel','norberto','gerardo','rolando','armando','nelson','arturo','silvio','renato','cristobal','mauricio','lisandro','salvador','adolfo']);
@@ -218,6 +252,8 @@ window.showSection=function(id){
   if(id==='marketing-plan')renderFinMktg();
   if(id==='costos')        renderFinCostos();
   if(id==='pagos-prov')    renderFinProv();
+  if(id==='inventario')    renderInventario();
+  if(id==='cashflow')      renderCashFlow();
 };
  
 async function apiFetch(path){const r=await fetch(PROXY+'/api/'+path);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}
@@ -273,13 +309,20 @@ function renderAll(){
   const customers=Object.keys(emailCount),returning=Object.values(emailCount).filter(c=>c>1).length;
   const retRate=customers.length?(returning/customers.length*100).toFixed(0):0;
  
-  const monthlyMap={},monthlyOrdersMap={};
-  paid.forEach(o=>{const d=new Date(o.created_at),k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');monthlyMap[k]=(monthlyMap[k]||0)+parseFloat(o.total||0);monthlyOrdersMap[k]=(monthlyOrdersMap[k]||0)+1;});
+  const monthlyMap={},monthlyOrdersMap={},monthlyUnitsMap={};
+  paid.forEach(o=>{const d=new Date(o.created_at),k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');monthlyMap[k]=(monthlyMap[k]||0)+parseFloat(o.total||0);monthlyOrdersMap[k]=(monthlyOrdersMap[k]||0)+1;const units=(o.products||[]).reduce((s,p)=>s+(p.quantity||1),0);monthlyUnitsMap[k]=(monthlyUnitsMap[k]||0)+units;});
   const mKeys=Object.keys(monthlyMap).sort(),mLast6=mKeys.slice(-6);
   const mLabels=mLast6.map(k=>{const[y,m]=k.split('-');return mNames[parseInt(m)-1]+"'"+y.slice(2);});
   const mVals=mLast6.map(k=>Math.round(monthlyMap[k]));
   const mTickets=mLast6.map(k=>monthlyOrdersMap[k]?Math.round(monthlyMap[k]/monthlyOrdersMap[k]):0);
   const statusCount={};orders.forEach(o=>{statusCount[o.payment_status]=(statusCount[o.payment_status]||0)+1;});
+ 
+  // YTD
+  const ytdStart=new Date(now.getFullYear(),0,1);
+  const ytdPaid=paid.filter(o=>new Date(o.created_at)>=ytdStart);
+  const ytdRev=ytdPaid.reduce((s,o)=>s+parseFloat(o.total||0),0);
+  const ytdUnits=ytdPaid.reduce((s,o)=>s+(o.products||[]).reduce((ss,p)=>ss+(p.quantity||1),0),0);
+  const ytdOrders=ytdPaid.length;
  
   const dailyMap={};paid.forEach(o=>{const d=new Date(o.created_at).toISOString().slice(0,10);dailyMap[d]=(dailyMap[d]||0)+parseFloat(o.total||0);});
   const dKeys=Object.keys(dailyMap).sort().slice(-30),dVals=dKeys.map(k=>Math.round(dailyMap[k])),dLabels=dKeys.map(k=>{const[,m,d]=k.split('-');return d+'/'+m;});
@@ -300,6 +343,10 @@ function renderAll(){
   const maxRev=Math.max(...sortedSkus.map(s=>s[1].rev),1);
   const fmtGroups={gummies:0,capsulas:0,combo:0,tabletas:0,otro:0};sortedSkus.forEach(([,d])=>fmtGroups[d.fmt]=(fmtGroups[d.fmt]||0)+d.rev);
   const ticketByProd=sortedSkus.map(([n,d])=>({name:n,ticket:d.orders?d.rev/d.orders:0,rev:d.rev,qty:d.qty})).sort((a,b)=>b.ticket-a.ticket);
+ 
+  // SKU breakdown per month
+  const skuMonthlyMap={};
+  paid.forEach(o=>{const d=new Date(o.created_at),mk=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');(o.products||[]).forEach(it=>{const n=getName(it.name);if(!skuMonthlyMap[mk])skuMonthlyMap[mk]={};if(!skuMonthlyMap[mk][n])skuMonthlyMap[mk][n]={qty:0,rev:0};skuMonthlyMap[mk][n].qty+=it.quantity||1;skuMonthlyMap[mk][n].rev+=parseFloat(it.price||0)*(it.quantity||1);});});
  
   const pairMap={};
   paid.forEach(o=>{const prods=(o.products||[]).map(it=>getName(it.name)).filter(Boolean);for(let i=0;i<prods.length;i++)for(let j=i+1;j<prods.length;j++){const key=[prods[i],prods[j]].sort().join(' + ');pairMap[key]=(pairMap[key]||0)+1;}});
@@ -378,6 +425,13 @@ function renderAll(){
  
   // B2B consolidated revenue for resumen KPI
   const b2bTotalCobrado = FIN_B2B.filter(b=>b.status==='Cobrado').reduce((s,b)=>s+parseFloat(b.monto||0),0);
+ 
+  // Build SKU monthly table HTML (for P&L)
+  window._skuMonthlyMap = skuMonthlyMap;
+  window._allMonthKeys = allMonthKeys;
+  window._monthlyMap = monthlyMap;
+  window._monthlyUnitsMap = monthlyUnitsMap;
+  window._monthlyOrdersMap = monthlyOrdersMap;
  
   document.getElementById('main').innerHTML=`
   <div id="sec-resumen" class="section active">
@@ -570,7 +624,7 @@ function renderAll(){
   <!-- ── FINANCES SECTIONS ── -->
  
   <div id="sec-finanzas" class="section">
-    <div class="sec-label">P&L Consolidado</div>
+    <div class="sec-label">P&amp;L Consolidado</div>
     <div class="month-tabs" id="pl-month-tabs"></div>
     <div class="grid2">
       <div id="pl-waterfall-container"></div>
@@ -580,6 +634,8 @@ function renderAll(){
           <div class="kpi"><div class="kpi-label">Gross margin</div><div class="kpi-value" id="pl-kpi-gm">—</div><div class="kpi-sub">después de COGS</div></div>
           <div class="kpi"><div class="kpi-label">EBITDA</div><div class="kpi-value" id="pl-kpi-ebitda">—</div><div class="kpi-sub">margen operativo</div></div>
           <div class="kpi"><div class="kpi-label">Mktg / Revenue</div><div class="kpi-value" id="pl-kpi-mktg">—</div><div class="kpi-sub">% del total</div></div>
+          <div class="kpi"><div class="kpi-label">Unidades vendidas</div><div class="kpi-value" id="pl-kpi-units">—</div><div class="kpi-sub">en el mes seleccionado</div></div>
+          <div class="kpi"><div class="kpi-label">Precio prom. / ud.</div><div class="kpi-value" id="pl-kpi-avgprice">—</div><div class="kpi-sub">Revenue ÷ unidades</div></div>
         </div>
         <div class="card" style="margin-top:0">
           <div class="card-title">Evolución mensual</div>
@@ -587,6 +643,17 @@ function renderAll(){
         </div>
       </div>
     </div>
+    <div class="sec-label">YTD <span style="font-size:11px;font-weight:400;color:#999">(Año en curso)</span></div>
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-label">Revenue YTD</div><div class="kpi-value up">${fmt(ytdRev)}</div><div class="kpi-sub">desde 1 ene ${now.getFullYear()}</div></div>
+      <div class="kpi"><div class="kpi-label">Pedidos YTD</div><div class="kpi-value">${fmtN(ytdOrders)}</div><div class="kpi-sub">órdenes pagadas</div></div>
+      <div class="kpi"><div class="kpi-label">Unidades YTD</div><div class="kpi-value">${fmtN(ytdUnits)}</div><div class="kpi-sub">unidades vendidas</div></div>
+      <div class="kpi"><div class="kpi-label">Precio prom. YTD</div><div class="kpi-value">${ytdUnits?fmt(ytdRev/ytdUnits):'—'}</div><div class="kpi-sub">revenue / unidades</div></div>
+    </div>
+    <div class="sec-label">SKUs vendidos por mes</div>
+    <div id="pl-sku-monthly"></div>
+    <div class="sec-label">Forecast mensual</div>
+    <div id="pl-forecast-container"></div>
   </div>
  
   <div id="sec-b2b" class="section">
@@ -595,6 +662,8 @@ function renderAll(){
       <button class="btn-primary" onclick="openB2BModal()">+ Nueva venta</button>
     </div>
     <div class="kpis" id="b2b-kpis"></div>
+    <div class="sec-label">Clientes B2B — Ventas y Unidades</div>
+    <div id="b2b-clients-table"></div>
     <div class="card"><table class="tbl">
       <thead><tr><th>Fecha</th><th>Cliente</th><th>Productos</th><th>Uds.</th><th>Total ARS</th><th>Estado</th><th></th></tr></thead>
       <tbody id="b2b-tbody"></tbody>
@@ -612,7 +681,7 @@ function renderAll(){
       <div class="chart-wrap" style="height:200px"><canvas id="chartGastos"></canvas></div>
     </div>
     <div class="card"><table class="tbl">
-      <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Total ARS</th><th></th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Medio de Pago</th><th>Total ARS</th><th></th></tr></thead>
       <tbody id="gastos-tbody"></tbody>
     </table></div>
   </div>
@@ -635,16 +704,18 @@ function renderAll(){
   </div>
  
   <div id="sec-costos" class="section">
-    <div class="sec-label">Costos de Producto</div>
+    <div class="sec-label">Costos de Producto (según Impo)</div>
     <div class="card">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;flex-wrap:wrap">
         <span style="font-size:12px;color:#999">Tipo de cambio ARS/USD:</span>
         <input type="range" min="800" max="3000" step="50" id="tc-slider" style="width:160px" oninput="document.getElementById('tc-val').textContent=this.value;recalcCostos()">
         <span style="font-weight:700;font-size:14px" id="tc-val">1400</span>
+        <span style="font-size:11px;color:#999">Factor Landed (COGS):&nbsp;</span>
+        <input type="number" id="landed-factor" value="2.3" step="0.1" min="1" max="5" style="width:70px;padding:4px 8px;border:1px solid #e0e0db;border-radius:6px;font-size:12px" oninput="recalcCostos()">
         <button class="btn-sm" onclick="saveCostos()">Guardar costos</button>
       </div>
       <table class="tbl">
-        <thead><tr><th>SKU</th><th>FOB USD</th><th>Landed COGS (ARS)</th><th>Precio venta (ARS)</th><th>Gross margin</th></tr></thead>
+        <thead><tr><th>SKU (TiendaNube)</th><th>FOB USD</th><th>Landed COGS (ARS)</th><th>Precio venta (ARS)</th><th>Gross margin</th></tr></thead>
         <tbody id="costos-tbody"></tbody>
       </table>
     </div>
@@ -663,6 +734,43 @@ function renderAll(){
       <thead><tr><th>Fecha</th><th>Proveedor</th><th>Concepto</th><th>Total ARS</th><th>Vencimiento</th><th>Estado</th><th></th></tr></thead>
       <tbody id="prov-tbody"></tbody>
     </table></div>
+  </div>
+ 
+  <!-- ── INVENTARIO ── -->
+  <div id="sec-inventario" class="section">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <div class="sec-label" style="margin:0">Inventario & Proyección</div>
+      <button class="btn-sm" onclick="renderInventario()">↺ Actualizar</button>
+    </div>
+    <div class="kpis" id="inv-kpis"></div>
+    <div class="sec-label">Sistema de alarma (semáforo) <span style="font-size:11px;font-weight:400;color:#999">— basado en ventas promedio y stock actual</span></div>
+    <div id="inv-semaforo"></div>
+    <div class="sec-label">Proyección de inventario <span style="font-size:11px;font-weight:400;color:#999">(próximos 3 meses)</span></div>
+    <div id="inv-forecast-table"></div>
+    <div class="sec-label">Forecast de compras sugeridas</div>
+    <div id="inv-compras"></div>
+  </div>
+ 
+  <!-- ── CASH FLOW ── -->
+  <div id="sec-cashflow" class="section">
+    <div class="sec-label">Cash Flow</div>
+    <div class="month-tabs" id="cf-month-tabs"></div>
+    <div class="grid2">
+      <div id="cf-waterfall"></div>
+      <div>
+        <div class="kpis" style="grid-template-columns:1fr 1fr" id="cf-kpis"></div>
+        <div class="card">
+          <div class="card-title">CF mensual acumulado</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="chartCF"></canvas></div>
+        </div>
+      </div>
+    </div>
+    <div class="sec-label">Detalle de movimientos</div>
+    <div id="cf-detail"></div>
+    <div style="display:flex;gap:8px;margin-top:1rem">
+      <button class="btn-primary" onclick="openCFModal()">+ Agregar movimiento</button>
+      <button class="btn-secondary" onclick="saveCF()">Guardar</button>
+    </div>
   </div>
   `;
  
@@ -719,21 +827,22 @@ function finLoad(key,def){try{return JSON.parse(localStorage.getItem('bl_fin_'+k
 function finSave(key,val){localStorage.setItem('bl_fin_'+key,JSON.stringify(val));}
  
 const DEFAULT_COSTOS=[
-  {sku:'Ashwa Caps',    fob:6.77, precio:67000},
-  {sku:'Ashwa Gummies', fob:7.89, precio:67000},
-  {sku:'LM Caps',       fob:6.93, precio:67000},
-  {sku:'LM Gummies',    fob:8.36, precio:67000},
-  {sku:'Reishi',        fob:7.35, precio:67000},
-  {sku:'Cordyceps',     fob:8.22, precio:67000},
-  {sku:'Tremella',      fob:6.97, precio:67000},
-  {sku:'Magnesio',      fob:7.07, precio:67000},
+  {sku:'Ashwagandha | Equilibrio Hormonal | Cápsulas',  fob:6.0,  precio:67000},
+  {sku:'Ashwagandha | Equilibrio Hormonal | Gummies',   fob:7.89, precio:67000},
+  {sku:'Melena de León | Claridad Mental | Cápsulas',   fob:6.93, precio:67000},
+  {sku:'Melena de León | Claridad Mental | Gummies',    fob:8.36, precio:67000},
+  {sku:'Reishi | Descanso Profundo | Gummies',          fob:7.35, precio:67000},
+  {sku:'Cordyceps | Energía & Performance | Cápsulas',  fob:8.22, precio:67000},
+  {sku:'Cordyceps | Energía & Performance | Gummies',   fob:8.22, precio:67000},
+  {sku:'Magnesio | Gummies',                            fob:7.07, precio:67000},
+  {sku:'Tremella | Piel & Hidratación | Cápsulas',      fob:6.97, precio:67000},
 ];
  
 const DEFAULT_PROV=[
-  {id:'p1',fecha:'2026-03-31',proveedor:'Paz',          concepto:'Honorarios', monto:500000, vence:'2026-05-01',status:'Pendiente',notas:'en calendario figura pendiente'},
+  {id:'p1',fecha:'2026-03-31',proveedor:'Paz',           concepto:'Honorarios', monto:500000, vence:'2026-05-01',status:'Pendiente',notas:'en calendario figura pendiente'},
   {id:'p2',fecha:'2026-04-08',proveedor:'Mary Fotógrafa',concepto:'Fotografía', monto:310000, vence:'2026-04-24',status:'Pendiente',notas:'fin de mes'},
-  {id:'p3',fecha:'2026-04-01',proveedor:'Sergio',       concepto:'Fee',        monto:500000, vence:'2026-04-25',status:'Pendiente',notas:''},
-  {id:'p4',fecha:'2026-03-01',proveedor:'Duran',        concepto:'Gestoría',   monto:812000, vence:'',          status:'Pendiente',notas:'esperamos seguimiento'},
+  {id:'p3',fecha:'2026-04-01',proveedor:'Sergio',        concepto:'Fee',        monto:500000, vence:'2026-04-25',status:'Pendiente',notas:''},
+  {id:'p4',fecha:'2026-03-01',proveedor:'Duran',         concepto:'Gestoría',   monto:812000, vence:'',           status:'Pendiente',notas:'esperamos seguimiento'},
 ];
  
 const MKTG_STRUCTURE=[
@@ -745,15 +854,40 @@ const MKTG_STRUCTURE=[
   {group:'Sin Cargo / USA',lines:['Sin Cargo','USA (neto)']},
 ];
  
-const GASTO_CATS=['Producción / COGS','Logística / Distribución','Admin / Contadora','Gestoría / Legal','Impuestos','Otros'];
+// All marketing concept lines (for dropdowns)
+const MKTG_ALL_CONCEPTS = MKTG_STRUCTURE.flatMap(g=>g.lines);
+ 
+// Updated expense categories matching Financials
+const GASTO_CATS=[
+  'Producción / COGS',
+  'Logística / Distribución',
+  'Marketing',
+  'Comisiones',
+  'Depósito',
+  'Contador',
+  'Gastos Adm',
+  'Gestoría',
+  'Impuestos',
+  'Fee Bono',
+  'Overhead',
+  'Movimientos entre cuentas',
+  'Other',
+];
+ 
+const MEDIOS_PAGO=['MercadoPago','Galicia','ICBC','Efectivo','Transferencia','Otros'];
  
 let FIN_B2B    = finLoad('b2b',[]);
 let FIN_GASTOS = finLoad('gastos',[]);
 let FIN_COSTOS = finLoad('costos',DEFAULT_COSTOS);
 let FIN_TC     = finLoad('tc',1400);
+let FIN_LANDED_FACTOR = finLoad('landedfactor',2.3);
 let FIN_PROV   = finLoad('prov',DEFAULT_PROV);
 let FIN_MKTG   = finLoad('mktg',{});
+let FIN_CF     = finLoad('cf',{});
+let FIN_FORECAST = finLoad('forecast',{});
+let FIN_INV    = finLoad('inv',{});
 let FIN_PL_MONTH = null;
+let FIN_CF_MONTH = null;
  
 const nowStr=()=>new Date().toISOString().slice(0,10);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -765,6 +899,8 @@ const allMonths=()=>{
   for(let i=11;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);set.add(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));}
   [...FIN_B2B,...FIN_GASTOS].forEach(r=>{if(r.fecha)set.add(r.fecha.slice(0,7));});
   Object.keys(FIN_MKTG).forEach(k=>set.add(k));
+  Object.keys(FIN_CF).forEach(k=>set.add(k));
+  if(window._allMonthKeys)window._allMonthKeys.forEach(k=>set.add(k));
   return[...set].sort();
 };
  
@@ -781,8 +917,9 @@ function b2bRevByMonth(){
 function cogsByMonth(){
   const map={};
   const tc=FIN_TC;
+  const lf=parseFloat(document.getElementById('landed-factor')?.value||FIN_LANDED_FACTOR||2.3);
   const avgFOB=FIN_COSTOS.reduce((s,c)=>s+c.fob,0)/FIN_COSTOS.length;
-  const avgLanded=avgFOB*tc*2.3;
+  const avgLanded=avgFOB*tc*lf;
   (typeof FILTERED_ORDERS!=='undefined'?FILTERED_ORDERS:[]).filter(o=>o.payment_status==='paid').forEach(o=>{
     const k=o.created_at?.slice(0,7);if(!k)return;
     const units=(o.products||[]).reduce((s,p)=>s+(p.quantity||1),0);
@@ -800,11 +937,24 @@ function mktgByMonth(){
     let total=0;Object.values(lines).forEach(v=>{total+=parseFloat(v||0);});
     if(total)map[month]=total;
   });
+  // Also pull from gastos with category "Marketing"
+  FIN_GASTOS.filter(g=>g.categoria==='Marketing').forEach(g=>{
+    const k=g.fecha?.slice(0,7);if(k)map[k]=(map[k]||0)+parseFloat(g.monto||0);
+  });
   return map;
 }
 function opexByMonth(){
   const map={};
-  FIN_GASTOS.forEach(g=>{const k=g.fecha?.slice(0,7);if(k)map[k]=(map[k]||0)+parseFloat(g.monto||0);});
+  FIN_GASTOS.filter(g=>g.categoria!=='Marketing').forEach(g=>{const k=g.fecha?.slice(0,7);if(k)map[k]=(map[k]||0)+parseFloat(g.monto||0);});
+  return map;
+}
+function unitsB2CByMonth(){
+  const map={};
+  (typeof FILTERED_ORDERS!=='undefined'?FILTERED_ORDERS:[]).filter(o=>o.payment_status==='paid').forEach(o=>{
+    const k=o.created_at?.slice(0,7);if(!k)return;
+    const units=(o.products||[]).reduce((s,p)=>s+(p.quantity||1),0);
+    map[k]=(map[k]||0)+units;
+  });
   return map;
 }
  
@@ -814,37 +964,76 @@ function renderFinPL(){
   const tabsEl=document.getElementById('pl-month-tabs');
   if(!tabsEl)return;
   tabsEl.innerHTML=months.slice(-8).map(m=>`<button class="month-tab${m===FIN_PL_MONTH?' active':''}" onclick="FIN_PL_MONTH='${m}';renderFinPL()">${mLabel(m)}</button>`).join('');
-  const b2c=b2cRevByMonth(),b2b=b2bRevByMonth(),cogs=cogsByMonth(),mktg=mktgByMonth(),opex=opexByMonth(),m=FIN_PL_MONTH;
+  const b2c=b2cRevByMonth(),b2b=b2bRevByMonth(),cogs=cogsByMonth(),mktg=mktgByMonth(),opex=opexByMonth(),units=unitsB2CByMonth(),m=FIN_PL_MONTH;
   const revB2C=b2c[m]||0,revB2B=b2b[m]||0,revTotal=revB2C+revB2B;
   const cogsVal=cogs[m]||0,grossP=revTotal-cogsVal;
   const grossPct=revTotal?(grossP/revTotal*100).toFixed(1):0;
   const mktgVal=mktg[m]||0,opexVal=opex[m]||0;
+  const unitsM=units[m]||0;
+  const avgPricePerUnit=unitsM&&revTotal?revTotal/unitsM:0;
   const ebitda=grossP-mktgVal-opexVal;
   const ebitdaPct=revTotal?(ebitda/revTotal*100).toFixed(1):0;
   const mktgPct=revTotal?(mktgVal/revTotal*100).toFixed(1):0;
+ 
+  // Distribution of P&L lines from Financials model
+  const distrib=FIN_GASTOS.filter(g=>g.fecha?.slice(0,7)===m);
+  const distribByCat={};distrib.forEach(g=>{distribByCat[g.categoria]=(distribByCat[g.categoria]||0)+parseFloat(g.monto||0);});
+ 
   const el=id=>document.getElementById(id);
   if(el('pl-kpi-rev'))el('pl-kpi-rev').textContent=fmt(revTotal);
   if(el('pl-kpi-gm'))el('pl-kpi-gm').textContent=grossPct+'%';
   if(el('pl-kpi-ebitda')){el('pl-kpi-ebitda').textContent=ebitdaPct+'%';el('pl-kpi-ebitda').className='kpi-value '+(ebitda>=0?'up':'down');}
   if(el('pl-kpi-mktg'))el('pl-kpi-mktg').textContent=mktgPct+'%';
+  if(el('pl-kpi-units'))el('pl-kpi-units').textContent=fmtN(unitsM);
+  if(el('pl-kpi-avgprice'))el('pl-kpi-avgprice').textContent=avgPricePerUnit?fmt(avgPricePerUnit):'—';
+ 
+  // Breakdown mirroring Financials "Cierres" structure
   const wf=el('pl-waterfall-container');
   if(wf)wf.innerHTML=`<div class="pl-waterfall">
-    <div class="pl-row header"><span>Línea</span><span>ARS</span></div>
+    <div class="pl-row header"><span>Línea P&amp;L</span><span>ARS</span></div>
     <div class="pl-row"><span>Ventas B2C (TiendaNube)</span><span class="pl-val" style="color:#1D9E75">${fmt(revB2C)}</span></div>
     <div class="pl-row"><span>Ventas B2B</span><span class="pl-val" style="color:#1D9E75">${fmt(revB2B)}</span></div>
-    <div class="pl-row subtotal"><span>= Revenue total</span><span class="pl-val">${fmt(revTotal)}</span></div>
-    <div class="pl-row negative"><span>− COGS (estimado)</span><span class="pl-val">${fmt(cogsVal)}</span></div>
+    <div class="pl-row subtotal"><span>= Revenue (Net Sales)</span><span class="pl-val">${fmt(revTotal)}</span></div>
+    <div class="pl-row negative"><span>− Landed COGS</span><span class="pl-val">${fmt(cogsVal)}</span></div>
     <div class="pl-row subtotal"><span>= Gross Profit <span class="pl-pct">${grossPct}%</span></span><span class="pl-val" style="color:${grossP>=0?'#1D9E75':'#D85A30'}">${fmt(grossP)}</span></div>
     <div class="pl-row negative"><span>− Marketing <span class="pl-pct">${mktgPct}%</span></span><span class="pl-val">${fmt(mktgVal)}</span></div>
-    <div class="pl-row negative"><span>− Gastos operativos</span><span class="pl-val">${fmt(opexVal)}</span></div>
+    <div class="pl-row negative"><span>− Distribución</span><span class="pl-val">${fmt(distribByCat['Logística / Distribución']||0)}</span></div>
+    <div class="pl-row negative"><span>− Comisiones</span><span class="pl-val">${fmt(distribByCat['Comisiones']||0)}</span></div>
+    <div class="pl-row negative"><span>− Depósito</span><span class="pl-val">${fmt(distribByCat['Depósito']||0)}</span></div>
+    <div class="pl-row negative"><span>− Contador</span><span class="pl-val">${fmt(distribByCat['Contador']||0)}</span></div>
+    <div class="pl-row negative"><span>− Gastos Adm</span><span class="pl-val">${fmt(distribByCat['Gastos Adm']||0)}</span></div>
+    <div class="pl-row negative"><span>− Gestoría</span><span class="pl-val">${fmt(distribByCat['Gestoría']||0)}</span></div>
+    <div class="pl-row negative"><span>− Impuestos</span><span class="pl-val">${fmt(distribByCat['Impuestos']||0)}</span></div>
+    <div class="pl-row negative"><span>− Fee Bono</span><span class="pl-val">${fmt(distribByCat['Fee Bono']||0)}</span></div>
+    <div class="pl-row negative"><span>− Overhead</span><span class="pl-val">${fmt(distribByCat['Overhead']||0)}</span></div>
+    <div class="pl-row negative"><span>− Other</span><span class="pl-val">${fmt(distribByCat['Other']||0)}</span></div>
     <div class="pl-row total"><span>= EBITDA <span class="pl-pct">${ebitdaPct}%</span></span><span class="pl-val" style="color:${ebitda>=0?'#1D9E75':'#D85A30'}">${fmt(ebitda)}</span></div>
   </div>`;
+ 
   const last6=months.slice(-6);
   mkChart('chartPL','bar',last6.map(mLabel),[
     {label:'Revenue',  data:last6.map(k=>(b2c[k]||0)+(b2b[k]||0)),  backgroundColor:'rgba(29,158,117,0.2)',borderColor:'#1D9E75',borderWidth:2,borderRadius:4},
     {label:'Gross P.', data:last6.map(k=>(b2c[k]||0)+(b2b[k]||0)-(cogs[k]||0)), backgroundColor:'#5DCAA5',borderRadius:4},
     {label:'EBITDA',   data:last6.map(k=>(b2c[k]||0)+(b2b[k]||0)-(cogs[k]||0)-(mktg[k]||0)-(opex[k]||0)), backgroundColor:'#185FA5',borderRadius:4},
   ],{scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},callback:tickY}}},plugins:{legend:{display:true,position:'bottom',labels:{font:{size:11},boxWidth:10,padding:8}}}});
+ 
+  // SKU breakdown by month table
+  const skuEl=el('pl-sku-monthly');
+  if(skuEl&&window._skuMonthlyMap){
+    const skuMKeys=Object.keys(window._skuMonthlyMap).sort().slice(-6);
+    const allSkus=new Set();skuMKeys.forEach(k=>Object.keys(window._skuMonthlyMap[k]).forEach(s=>allSkus.add(s)));
+    const skuArr=[...allSkus].filter(s=>!s.toLowerCase().includes('envío'));
+    skuEl.innerHTML=`<div class="card" style="overflow-x:auto"><div class="card-title">SKUs vendidos por mes (unidades)</div><table class="tbl"><thead><tr><th>SKU</th>${skuMKeys.map(k=>`<th>${mLabel(k)}</th>`).join('')}<th style="color:#1D9E75">Total</th></tr></thead><tbody>${skuArr.map(sku=>{const vals=skuMKeys.map(k=>window._skuMonthlyMap[k]?.[sku]?.qty||0);const tot=vals.reduce((s,v)=>s+v,0);if(!tot)return'';return`<tr><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${sku}</td>${vals.map(v=>`<td style="text-align:right;color:${v>0?'#1a1a1a':'#ccc'}">${v||'—'}</td>`).join('')}<td style="text-align:right;font-weight:700;color:#1D9E75">${tot}</td></tr>`;}).filter(Boolean).join('')}</tbody></table></div>`;
+  }
+ 
+  // Forecast section
+  const fcEl=el('pl-forecast-container');
+  if(fcEl){
+    const fMonths=allMonths().slice(-3).map(k=>{const[y,mo]=k.split('-');const nm=new Date(parseInt(y),parseInt(mo),1);return nm.getFullYear()+'-'+String(nm.getMonth()+1).padStart(2,'0');});
+    fcEl.innerHTML=`<div class="card"><div class="card-title">Forecast próximos 3 meses <span style="font-size:11px;font-weight:400;color:#999">(editable)</span></div><table class="tbl"><thead><tr><th>Concepto</th>${fMonths.map(k=>`<th>${mLabel(k)}</th>`).join('')}</tr></thead><tbody>${[
+      ['Revenue estimado','fc_rev'],['COGS estimado','fc_cogs'],['Marketing','fc_mktg'],['Gastos Op.','fc_opex'],['EBITDA forecast','fc_ebitda'],
+    ].map(([label,prefix])=>`<tr><td style="font-weight:500">${label}</td>${fMonths.map(k=>{const val=FIN_FORECAST[k]?.[prefix]||'';return`<td><input class="mktg-input" type="number" placeholder="0" value="${val}" onchange="if(!FIN_FORECAST['${k}'])FIN_FORECAST['${k}']={};FIN_FORECAST['${k}']['${prefix}']=parseFloat(this.value)||0"></td>`;}).join('')}</tr>`).join('')}</tbody></table><button class="btn-primary" style="margin-top:12px" onclick="finSave('forecast',FIN_FORECAST);alert('Forecast guardado ✓')">Guardar forecast</button></div>`;
+  }
 }
  
 function renderFinB2B(){
@@ -857,6 +1046,16 @@ function renderFinB2B(){
     <div class="kpi"><div class="kpi-label">Revenue B2B</div><div class="kpi-value up">${fmt(cobrado)}</div><div class="kpi-sub">cobrado</div></div>
     <div class="kpi"><div class="kpi-label">Por cobrar</div><div class="kpi-value${pending>0?' down':''}">${fmt(pending)}</div><div class="kpi-sub">pendiente</div></div>
     <div class="kpi"><div class="kpi-label">Ticket prom.</div><div class="kpi-value">${FIN_B2B.length?fmt(total/FIN_B2B.length):'—'}</div><div class="kpi-sub">por factura</div></div>`;
+ 
+  // Client summary table
+  const clientMap={};
+  FIN_B2B.forEach(b=>{if(!b.cliente)return;if(!clientMap[b.cliente])clientMap[b.cliente]={ventas:0,unidades:0,cobrado:0};clientMap[b.cliente].ventas+=parseFloat(b.monto||0);clientMap[b.cliente].unidades+=parseInt(b.unidades||0);if(b.status==='Cobrado')clientMap[b.cliente].cobrado+=parseFloat(b.monto||0);});
+  const clientsEl=document.getElementById('b2b-clients-table');
+  if(clientsEl){
+    const sortedClients=Object.entries(clientMap).sort((a,b)=>b[1].ventas-a[1].ventas);
+    clientsEl.innerHTML=sortedClients.length===0?'<div class="card"><div class="empty">Sin clientes B2B registrados</div></div>':`<div class="card"><div class="card-title">Resumen por cliente</div><table class="tbl"><thead><tr><th>Cliente</th><th>Total facturado</th><th>Cobrado</th><th>Unidades</th></tr></thead><tbody>${sortedClients.map(([cli,d])=>`<tr><td style="font-weight:600">${cli}</td><td>${fmt(d.ventas)}</td><td style="color:#1D9E75">${fmt(d.cobrado)}</td><td>${fmtN(d.unidades)}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+ 
   const tbody=document.getElementById('b2b-tbody');
   if(!tbody)return;
   if(!FIN_B2B.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#999;padding:1.5rem">Sin ventas B2B registradas</td></tr>';return;}
@@ -883,7 +1082,12 @@ window.openB2BModal=function(){
       <div class="fin-field"><label>Estado</label><select id="b2b-status"><option>Pendiente</option><option>Cobrado</option></select></div>
     </div>
     <div class="fin-field"><label>Cliente / Empresa</label><input type="text" id="b2b-cliente" placeholder="Ej: GreenCo, Holofood..."></div>
-    <div class="fin-field"><label>Productos / Descripción</label><input type="text" id="b2b-productos" placeholder="Ej: LM Caps x20, Reishi x10"></div>
+    <div class="fin-field"><label>Productos / Descripción</label>
+      <select id="b2b-productos" multiple style="height:120px">
+        ${TN_PRODUCTS.map(p=>`<option value="${p}">${p}</option>`).join('')}
+      </select>
+      <div style="font-size:10px;color:#999;margin-top:3px">Ctrl+Click para seleccionar múltiples</div>
+    </div>
     <div class="fin-row2">
       <div class="fin-field"><label>Unidades totales</label><input type="number" id="b2b-uds" placeholder="0" min="0"></div>
       <div class="fin-field"><label>Total ARS</label><input type="number" id="b2b-monto" placeholder="0" min="0"></div>
@@ -898,7 +1102,9 @@ window.openB2BModal=function(){
 };
  
 window.saveB2B=function(){
-  const e={id:uid(),fecha:document.getElementById('b2b-fecha').value,cliente:document.getElementById('b2b-cliente').value.trim(),productos:document.getElementById('b2b-productos').value.trim(),unidades:parseInt(document.getElementById('b2b-uds').value)||0,monto:parseFloat(document.getElementById('b2b-monto').value)||0,status:document.getElementById('b2b-status').value,notas:document.getElementById('b2b-notas').value.trim()};
+  const sel=document.getElementById('b2b-productos');
+  const selectedProds=[...sel.selectedOptions].map(o=>o.value).join(', ');
+  const e={id:uid(),fecha:document.getElementById('b2b-fecha').value,cliente:document.getElementById('b2b-cliente').value.trim(),productos:selectedProds||document.getElementById('b2b-productos').value,unidades:parseInt(document.getElementById('b2b-uds').value)||0,monto:parseFloat(document.getElementById('b2b-monto').value)||0,status:document.getElementById('b2b-status').value,notas:document.getElementById('b2b-notas').value.trim()};
   if(!e.cliente||!e.monto){alert('Cliente y monto son requeridos');return;}
   FIN_B2B.push(e);finSave('b2b',FIN_B2B);document.getElementById('b2b-modal').remove();renderFinB2B();
 };
@@ -915,15 +1121,16 @@ function renderFinGastos(){
     <div class="kpi"><div class="kpi-label">Total histórico</div><div class="kpi-value">${fmt(totalAll)}</div><div class="kpi-sub">${fmtN(FIN_GASTOS.length)} registros</div></div>
     ${GASTO_CATS.slice(0,2).map(c=>`<div class="kpi"><div class="kpi-label">${c}</div><div class="kpi-value">${fmt(catTotals[c]||0)}</div><div class="kpi-sub">este mes</div></div>`).join('')}`;
   const catLabels=Object.keys(catTotals),catVals=Object.values(catTotals).map(v=>Math.round(v));
-  if(catLabels.length)mkChart('chartGastos','doughnut',catLabels,[{data:catVals,backgroundColor:['#1D9E75','#5DCAA5','#185FA5','#EF9F27','#D85A30','#B4B2A9'],borderWidth:0}],{plugins:{legend:{display:true,position:'bottom',labels:{font:{size:11},boxWidth:10,padding:8}}}});
+  if(catLabels.length)mkChart('chartGastos','doughnut',catLabels,[{data:catVals,backgroundColor:['#1D9E75','#5DCAA5','#185FA5','#EF9F27','#D85A30','#B4B2A9','#993556','#8B6914','#2E7D32','#0277BD','#6A1B9A','#E65100','#37474F'],borderWidth:0}],{plugins:{legend:{display:true,position:'bottom',labels:{font:{size:11},boxWidth:10,padding:8}}}});
   const tbody=document.getElementById('gastos-tbody');
   if(!tbody)return;
-  if(!FIN_GASTOS.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:#999;padding:1.5rem">Sin gastos registrados</td></tr>';return;}
+  if(!FIN_GASTOS.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#999;padding:1.5rem">Sin gastos registrados</td></tr>';return;}
   tbody.innerHTML=[...FIN_GASTOS].sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')).map(g=>`
     <tr>
       <td style="color:#999;font-size:11px;white-space:nowrap">${g.fecha}</td>
       <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.concepto}</td>
       <td><span class="badge b-open" style="font-size:10px">${g.categoria}</span></td>
+      <td style="font-size:11px;color:#666">${g.medioPago||'—'}</td>
       <td style="font-weight:600">${fmt(parseFloat(g.monto||0))}</td>
       <td><button class="btn-danger" onclick="deleteGasto('${g.id}')">✕</button></td>
     </tr>`).join('');
@@ -940,7 +1147,10 @@ window.openGastoModal=function(){
       <div class="fin-field"><label>Categoría</label><select id="g-cat">${GASTO_CATS.map(c=>`<option>${c}</option>`).join('')}</select></div>
     </div>
     <div class="fin-field"><label>Concepto</label><input type="text" id="g-concepto" placeholder="Ej: Andreani Abril, Depósito Jucaval..."></div>
-    <div class="fin-field"><label>Proveedor (opcional)</label><input type="text" id="g-proveedor" placeholder="Ej: Oriola, Jucaval..."></div>
+    <div class="fin-row2">
+      <div class="fin-field"><label>Proveedor (opcional)</label><input type="text" id="g-proveedor" placeholder="Ej: Oriola, Jucaval..."></div>
+      <div class="fin-field"><label>Medio de Pago</label><select id="g-medioPago">${MEDIOS_PAGO.map(m=>`<option>${m}</option>`).join('')}</select></div>
+    </div>
     <div class="fin-field"><label>Total ARS</label><input type="number" id="g-monto" placeholder="0" min="0"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:1rem">
       <button class="btn-secondary" onclick="document.getElementById('gasto-modal').remove()">Cancelar</button>
@@ -951,9 +1161,11 @@ window.openGastoModal=function(){
 };
  
 window.saveGasto=function(){
-  const e={id:uid(),fecha:document.getElementById('g-fecha').value,concepto:document.getElementById('g-concepto').value.trim(),categoria:document.getElementById('g-cat').value,proveedor:document.getElementById('g-proveedor').value.trim(),monto:parseFloat(document.getElementById('g-monto').value)||0};
+  const e={id:uid(),fecha:document.getElementById('g-fecha').value,concepto:document.getElementById('g-concepto').value.trim(),categoria:document.getElementById('g-cat').value,proveedor:document.getElementById('g-proveedor').value.trim(),medioPago:document.getElementById('g-medioPago').value,monto:parseFloat(document.getElementById('g-monto').value)||0};
   if(!e.concepto||!e.monto){alert('Concepto y monto son requeridos');return;}
   FIN_GASTOS.push(e);finSave('gastos',FIN_GASTOS);document.getElementById('gasto-modal').remove();renderFinGastos();
+  // If category is Marketing, also update mktg actual
+  if(e.categoria==='Marketing'&&FIN_PL_MONTH){renderFinPL();}
 };
  
 function renderFinMktg(){
@@ -1021,15 +1233,16 @@ window.addMktgMonth=function(){
  
 function renderFinCostos(){
   const tc=FIN_TC;
+  const lf=parseFloat(document.getElementById('landed-factor')?.value||FIN_LANDED_FACTOR||2.3);
   const slider=document.getElementById('tc-slider'),tcVal=document.getElementById('tc-val');
   if(slider){slider.value=tc;if(tcVal)tcVal.textContent=tc;}
   const tbody=document.getElementById('costos-tbody');
   if(!tbody)return;
   tbody.innerHTML=FIN_COSTOS.map((c,i)=>{
-    const landed=c.fob*tc*2.3,margin=c.precio?((c.precio-landed)/c.precio*100).toFixed(1):0;
+    const landed=c.fob*tc*lf,margin=c.precio?((c.precio-landed)/c.precio*100).toFixed(1):0;
     const mClass=margin>=70?'b-paid':margin>=50?'b-pending':'b-cancelled';
     return`<tr>
-      <td style="font-weight:600">${c.sku}</td>
+      <td style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.sku}</td>
       <td><input class="cost-input-sm" type="number" step="0.01" value="${c.fob}" onchange="FIN_COSTOS[${i}].fob=parseFloat(this.value)||0;recalcCostos()"></td>
       <td style="color:#999">${fmt(Math.round(landed))}</td>
       <td><input class="cost-input-sm" type="number" step="100" value="${c.precio}" onchange="FIN_COSTOS[${i}].precio=parseFloat(this.value)||0;recalcCostos()"></td>
@@ -1038,10 +1251,15 @@ function renderFinCostos(){
   }).join('');
 }
  
-window.recalcCostos=function(){FIN_TC=parseInt(document.getElementById('tc-slider')?.value||FIN_TC);renderFinCostos();};
+window.recalcCostos=function(){
+  FIN_TC=parseInt(document.getElementById('tc-slider')?.value||FIN_TC);
+  FIN_LANDED_FACTOR=parseFloat(document.getElementById('landed-factor')?.value||FIN_LANDED_FACTOR||2.3);
+  renderFinCostos();
+};
 window.saveCostos=function(){
   FIN_TC=parseInt(document.getElementById('tc-slider')?.value||FIN_TC);
-  finSave('costos',FIN_COSTOS);finSave('tc',FIN_TC);
+  FIN_LANDED_FACTOR=parseFloat(document.getElementById('landed-factor')?.value||FIN_LANDED_FACTOR||2.3);
+  finSave('costos',FIN_COSTOS);finSave('tc',FIN_TC);finSave('landedfactor',FIN_LANDED_FACTOR);
   if(document.getElementById('sec-finanzas')?.classList.contains('active'))renderFinPL();
   alert('Costos guardados ✓');
 };
@@ -1115,6 +1333,201 @@ window.saveProv=function(){
   const e={id:uid(),fecha:document.getElementById('pv-fecha').value,proveedor:document.getElementById('pv-prov').value.trim(),factura:document.getElementById('pv-fc').value.trim(),concepto:document.getElementById('pv-concepto').value.trim(),monto:parseFloat(document.getElementById('pv-monto').value)||0,vence:document.getElementById('pv-vence').value,status:document.getElementById('pv-status').value,notas:document.getElementById('pv-notas').value.trim()};
   if(!e.proveedor||!e.monto){alert('Proveedor y monto son requeridos');return;}
   FIN_PROV.push(e);finSave('prov',FIN_PROV);document.getElementById('prov-modal').remove();renderFinProv();
+};
+ 
+// ═══════════════════════════════════════════════════════════
+// INVENTARIO MODULE
+// ═══════════════════════════════════════════════════════════
+ 
+function renderInventario(){
+  const kpisEl=document.getElementById('inv-kpis');
+  const semaforoEl=document.getElementById('inv-semaforo');
+  const forecastEl=document.getElementById('inv-forecast-table');
+  const comprasEl=document.getElementById('inv-compras');
+  if(!kpisEl)return;
+ 
+  const totalStockUnits=ALL_PRODUCTS.reduce((s,p)=>s+(p.variants?.[0]?.stock||0),0);
+  const outOf=ALL_PRODUCTS.filter(p=>!p.variants?.[0]?.stock).length;
+  const critical=ALL_PRODUCTS.filter(p=>{const s=p.variants?.[0]?.stock;return s>0&&s<=5;}).length;
+ 
+  kpisEl.innerHTML=`
+    <div class="kpi"><div class="kpi-label">Total unidades en stock</div><div class="kpi-value">${fmtN(totalStockUnits)}</div><div class="kpi-sub">según TiendaNube</div></div>
+    <div class="kpi"><div class="kpi-label">SKUs sin stock</div><div class="kpi-value down">${outOf}</div><div class="kpi-sub">acción urgente</div></div>
+    <div class="kpi"><div class="kpi-label">SKUs críticos</div><div class="kpi-value" style="color:#E65100">${critical}</div><div class="kpi-sub">1–5 uds</div></div>
+    <div class="kpi"><div class="kpi-label">Total SKUs</div><div class="kpi-value">${ALL_PRODUCTS.length}</div><div class="kpi-sub">en catálogo</div></div>`;
+ 
+  // Calculate avg daily sales per SKU from last 30 days
+  const now=new Date();
+  const last30=new Date(now);last30.setDate(now.getDate()-30);
+  const skuSales={};
+  (FILTERED_ORDERS||[]).filter(o=>o.payment_status==='paid'&&new Date(o.created_at)>=last30).forEach(o=>{
+    (o.products||[]).forEach(it=>{const n=getName(it.name);skuSales[n]=(skuSales[n]||0)+(it.quantity||1);});
+  });
+  const avgDailySales={};Object.entries(skuSales).forEach(([n,q])=>avgDailySales[n]=q/30);
+ 
+  // Build semaforo per product
+  let semaforoHtml='<div class="card"><div class="card-title">Estado de inventario por SKU</div><table class="tbl"><thead><tr><th>SKU</th><th>Stock actual</th><th>Ventas/día (30d)</th><th>Días restantes</th><th>Estado</th><th>Pedido realizado</th></tr></thead><tbody>';
+  const comprasSugeridas=[];
+ 
+  ALL_PRODUCTS.forEach(p=>{
+    const n=getName(p.name);
+    const stock=p.variants?.[0]?.stock||0;
+    const daily=avgDailySales[n]||0;
+    const daysLeft=daily>0?Math.round(stock/daily):999;
+    const invData=FIN_INV[p.id]||{};
+    let color,label,semClass;
+    if(stock===0){color='#D85A30';label='Sin stock';semClass='rojo';}
+    else if(daysLeft<=30){color='#EF9F27';label=daysLeft+'d — Pedir YA';semClass='amarillo';}
+    else if(daysLeft<=60){color='#EF9F27';label=daysLeft+'d — Monitorear';semClass='amarillo';}
+    else{color='#1D9E75';label='OK ('+daysLeft+'d)';semClass='verde';}
+    if(daysLeft<=60&&stock>0)comprasSugeridas.push({name:n,stock,daily,daysLeft,suggestedQty:Math.ceil(daily*90)});
+    const checked=invData.pedidoRealizado?'checked':'';
+    semaforoHtml+=`<tr>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${n}</td>
+      <td style="font-weight:600">${fmtN(stock)}</td>
+      <td style="color:#999">${daily>0?daily.toFixed(1):'—'}</td>
+      <td style="font-weight:600;color:${color}">${daily>0?daysLeft+'d':'—'}</td>
+      <td><span class="semaforo ${semClass}"></span><span style="color:${color};font-size:11px">${label}</span></td>
+      <td style="text-align:center"><input type="checkbox" class="inv-check" ${checked} onchange="toggleInvPedido('${p.id}',this.checked)"></td>
+    </tr>`;
+  });
+  semaforoHtml+='</tbody></table></div>';
+  if(semaforoEl)semaforoEl.innerHTML=semaforoHtml;
+ 
+  // 3-month forecast
+  let forecastHtml='<div class="card" style="overflow-x:auto"><div class="card-title">Proyección próximos 3 meses</div><table class="tbl"><thead><tr><th>SKU</th><th>Stock hoy</th><th>Mes 1</th><th>Mes 2</th><th>Mes 3</th><th>Unid. necesitar</th></tr></thead><tbody>';
+  ALL_PRODUCTS.slice(0,15).forEach(p=>{
+    const n=getName(p.name);
+    const stock=p.variants?.[0]?.stock||0;
+    const monthly=Math.round((avgDailySales[n]||0)*30);
+    const m1=Math.max(0,stock-monthly),m2=Math.max(0,m1-monthly),m3=Math.max(0,m2-monthly);
+    const needed=Math.max(0,monthly*3-stock);
+    forecastHtml+=`<tr>
+      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n}</td>
+      <td style="font-weight:600">${fmtN(stock)}</td>
+      <td style="color:${m1<10?'#D85A30':m1<30?'#EF9F27':'#1D9E75'}">${fmtN(m1)}</td>
+      <td style="color:${m2<10?'#D85A30':m2<30?'#EF9F27':'#1D9E75'}">${fmtN(m2)}</td>
+      <td style="color:${m3<10?'#D85A30':m3<30?'#EF9F27':'#1D9E75'}">${fmtN(m3)}</td>
+      <td style="font-weight:600;color:${needed>0?'#D85A30':'#1D9E75'}">${needed>0?fmtN(needed)+' uds':'—'}</td>
+    </tr>`;
+  });
+  forecastHtml+='</tbody></table></div>';
+  if(forecastEl)forecastEl.innerHTML=forecastHtml;
+ 
+  // Purchases forecast
+  if(comprasEl){
+    if(!comprasSugeridas.length){comprasEl.innerHTML='<div class="card"><div class="empty">✓ Todos los SKUs tienen stock para más de 60 días.</div></div>';}
+    else{comprasEl.innerHTML=`<div class="card"><div class="card-title">SKUs para ordenar (cobertura &lt;60 días)</div><table class="tbl"><thead><tr><th>SKU</th><th>Stock actual</th><th>Días restantes</th><th>Sugerido comprar (90d)</th></tr></thead><tbody>${comprasSugeridas.sort((a,b)=>a.daysLeft-b.daysLeft).map(c=>`<tr><td style="font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</td><td>${fmtN(c.stock)}</td><td style="font-weight:600;color:${c.daysLeft<=30?'#D85A30':'#EF9F27'}">${c.daysLeft}d</td><td style="font-weight:700;color:#185FA5">${fmtN(c.suggestedQty)} uds</td></tr>`).join('')}</tbody></table></div>`;}
+  }
+}
+ 
+window.toggleInvPedido=function(pid,checked){if(!FIN_INV[pid])FIN_INV[pid]={};FIN_INV[pid].pedidoRealizado=checked;finSave('inv',FIN_INV);};
+ 
+// ═══════════════════════════════════════════════════════════
+// CASH FLOW MODULE
+// ═══════════════════════════════════════════════════════════
+ 
+function renderCashFlow(){
+  const months=allMonths();
+  if(!FIN_CF_MONTH||!months.includes(FIN_CF_MONTH))FIN_CF_MONTH=currentMonth();
+  const tabsEl=document.getElementById('cf-month-tabs');
+  if(!tabsEl)return;
+  tabsEl.innerHTML=months.slice(-10).map(m=>`<button class="month-tab${m===FIN_CF_MONTH?' active':''}" onclick="FIN_CF_MONTH='${m}';renderCashFlow()">${mLabel(m)}</button>`).join('');
+ 
+  const b2c=b2cRevByMonth(),b2b=b2bRevByMonth(),cogs=cogsByMonth(),mktg=mktgByMonth(),opex=opexByMonth();
+  const m=FIN_CF_MONTH;
+  const cfData=FIN_CF[m]||{};
+ 
+  // Base CF from P&L
+  const revTotal=(b2c[m]||0)+(b2b[m]||0);
+  const cogsVal=cogs[m]||0;
+  const mktgVal=mktg[m]||0;
+  const opexVal=opex[m]||0;
+  const ebitda=revTotal-cogsVal-mktgVal-opexVal;
+ 
+  // Extra CF items (manual)
+  const cfExtras=cfData.extras||[];
+  const cfIn=cfExtras.filter(e=>e.tipo==='ingreso').reduce((s,e)=>s+parseFloat(e.monto||0),0);
+  const cfOut=cfExtras.filter(e=>e.tipo==='egreso').reduce((s,e)=>s+parseFloat(e.monto||0),0);
+ 
+  const impo=parseFloat(cfData.impo||0);
+  const produccion=parseFloat(cfData.produccion||0);
+  const deuda=parseFloat(cfData.deuda||0);
+  const cfNeto=ebitda+cfIn-cfOut-impo-produccion-deuda;
+ 
+  // KPIs
+  const cfKpis=document.getElementById('cf-kpis');
+  if(cfKpis)cfKpis.innerHTML=`
+    <div class="kpi"><div class="kpi-label">Revenue</div><div class="kpi-value up">${fmt(revTotal)}</div><div class="kpi-sub">B2C + B2B</div></div>
+    <div class="kpi"><div class="kpi-label">EBITDA operativo</div><div class="kpi-value ${ebitda>=0?'up':'down'}">${fmt(ebitda)}</div><div class="kpi-sub">base CF</div></div>
+    <div class="kpi"><div class="kpi-label">CF Neto</div><div class="kpi-value ${cfNeto>=0?'up':'down'}">${fmt(cfNeto)}</div><div class="kpi-sub">después de impo + prod.</div></div>
+    <div class="kpi"><div class="kpi-label">CxC pendiente</div><div class="kpi-value">${fmt(FIN_B2B.filter(b=>b.status==='Pendiente'&&b.fecha?.slice(0,7)===m).reduce((s,b)=>s+parseFloat(b.monto||0),0))}</div><div class="kpi-sub">B2B por cobrar</div></div>`;
+ 
+  // Waterfall
+  const wfEl=document.getElementById('cf-waterfall');
+  if(wfEl)wfEl.innerHTML=`<div class="pl-waterfall">
+    <div class="pl-row header"><span>Cash Flow — ${mLabel(m)}</span><span>ARS</span></div>
+    <div class="pl-row in"><span>+ Net Sales (B2C + B2B)</span><span class="pl-val">${fmt(revTotal)}</span></div>
+    <div class="pl-row out"><span>− Gastos Operativos (OPEX)</span><span class="pl-val">${fmt(opexVal)}</span></div>
+    <div class="pl-row out"><span>− Marketing</span><span class="pl-val">${fmt(mktgVal)}</span></div>
+    <div class="pl-row subtotal"><span>= EBITDA operativo</span><span class="pl-val" style="color:${ebitda>=0?'#1D9E75':'#D85A30'}">${fmt(ebitda)}</span></div>
+    <div class="pl-row out"><span>− Producción / Impo</span><span class="pl-val"><input class="cost-input-sm" type="number" value="${cfData.produccion||''}" placeholder="0" onchange="if(!FIN_CF['${m}'])FIN_CF['${m}']={};FIN_CF['${m}'].produccion=parseFloat(this.value)||0;renderCashFlow()"></span></div>
+    <div class="pl-row out"><span>− Importación</span><span class="pl-val"><input class="cost-input-sm" type="number" value="${cfData.impo||''}" placeholder="0" onchange="if(!FIN_CF['${m}'])FIN_CF['${m}']={};FIN_CF['${m}'].impo=parseFloat(this.value)||0;renderCashFlow()"></span></div>
+    <div class="pl-row out"><span>± Deuda / Financiamiento</span><span class="pl-val"><input class="cost-input-sm" type="number" value="${cfData.deuda||''}" placeholder="0" onchange="if(!FIN_CF['${m}'])FIN_CF['${m}']={};FIN_CF['${m}'].deuda=parseFloat(this.value)||0;renderCashFlow()"></span></div>
+    ${cfExtras.map((e,i)=>`<div class="pl-row ${e.tipo==='ingreso'?'in':'out'}"><span>${e.tipo==='ingreso'?'+':'−'} ${e.descripcion}</span><span class="pl-val">${fmt(parseFloat(e.monto||0))}<button class="btn-danger" style="margin-left:6px" onclick="deleteCFExtra('${m}',${i})">✕</button></span></div>`).join('')}
+    <div class="pl-row total"><span>= CF Neto</span><span class="pl-val" style="color:${cfNeto>=0?'#1D9E75':'#D85A30'}">${fmt(cfNeto)}</span></div>
+  </div>`;
+ 
+  // Monthly CF chart (last 6 months)
+  const last6=months.slice(-6);
+  const cfVals=last6.map(k=>{
+    const d=FIN_CF[k]||{},r=(b2c[k]||0)+(b2b[k]||0);
+    const e=r-(cogs[k]||0)-(mktg[k]||0)-(opex[k]||0)-(parseFloat(d.produccion||0))-(parseFloat(d.impo||0))-(parseFloat(d.deuda||0));
+    const extras=d.extras||[];
+    return Math.round(e+extras.filter(x=>x.tipo==='ingreso').reduce((s,x)=>s+parseFloat(x.monto||0),0)-extras.filter(x=>x.tipo==='egreso').reduce((s,x)=>s+parseFloat(x.monto||0),0));
+  });
+  mkChart('chartCF','bar',last6.map(mLabel),[{data:cfVals,backgroundColor:cfVals.map(v=>v>=0?'#1D9E75':'#D85A30'),borderRadius:4}],{scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},callback:tickY}}}});
+ 
+  // Detail table
+  const detailEl=document.getElementById('cf-detail');
+  if(detailEl){
+    const allExtras=cfExtras.map((e,i)=>({...e,idx:i}));
+    detailEl.innerHTML=allExtras.length===0?'<div class="card"><div class="empty">Sin movimientos manuales para este mes. Agregá ingresos/egresos adicionales.</div></div>':`<div class="card"><table class="tbl"><thead><tr><th>Tipo</th><th>Descripción</th><th>Monto</th><th></th></tr></thead><tbody>${allExtras.map(e=>`<tr><td>${e.tipo==='ingreso'?'<span class="badge b-paid">Ingreso</span>':'<span class="badge b-cancelled">Egreso</span>'}</td><td>${e.descripcion}</td><td style="font-weight:600;color:${e.tipo==='ingreso'?'#1D9E75':'#D85A30'}">${fmt(parseFloat(e.monto||0))}</td><td><button class="btn-danger" onclick="deleteCFExtra('${m}',${e.idx})">✕</button></td></tr>`).join('')}</tbody></table></div>`;
+  }
+}
+ 
+window.deleteCFExtra=function(month,idx){if(!FIN_CF[month]?.extras)return;FIN_CF[month].extras.splice(idx,1);finSave('cf',FIN_CF);renderCashFlow();};
+window.saveCF=function(){finSave('cf',FIN_CF);alert('Cash Flow guardado ✓');};
+ 
+window.openCFModal=function(){
+  const modal=document.createElement('div');modal.className='fin-modal';modal.id='cf-modal';
+  const m=FIN_CF_MONTH||currentMonth();
+  modal.innerHTML=`<div class="fin-modal-box">
+    <div class="fin-modal-title">Agregar movimiento — ${mLabel(m)}</div>
+    <div class="fin-row2">
+      <div class="fin-field"><label>Tipo</label><select id="cf-tipo"><option value="ingreso">Ingreso</option><option value="egreso">Egreso</option></select></div>
+      <div class="fin-field"><label>Monto ARS</label><input type="number" id="cf-monto" placeholder="0" min="0"></div>
+    </div>
+    <div class="fin-field"><label>Descripción</label><input type="text" id="cf-desc" placeholder="Ej: Cobro cliente, Pago proveedor..."></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:1rem">
+      <button class="btn-secondary" onclick="document.getElementById('cf-modal').remove()">Cancelar</button>
+      <button class="btn-primary" onclick="saveCFExtra('${m}')">Guardar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+};
+ 
+window.saveCFExtra=function(m){
+  const tipo=document.getElementById('cf-tipo').value;
+  const monto=parseFloat(document.getElementById('cf-monto').value)||0;
+  const descripcion=document.getElementById('cf-desc').value.trim();
+  if(!descripcion||!monto){alert('Descripción y monto requeridos');return;}
+  if(!FIN_CF[m])FIN_CF[m]={};
+  if(!FIN_CF[m].extras)FIN_CF[m].extras=[];
+  FIN_CF[m].extras.push({tipo,monto,descripcion});
+  finSave('cf',FIN_CF);
+  document.getElementById('cf-modal').remove();
+  renderCashFlow();
 };
  
 function renderFinances(){
