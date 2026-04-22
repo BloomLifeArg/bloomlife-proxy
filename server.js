@@ -230,13 +230,51 @@ app.post('/webhook/orden-pagada', async (req, res) => {
 });
 
 // ── ENDPOINT DE DIAGNÓSTICO ───────────────────────────────────────────────────
-// Visitá https://TU-APP.onrender.com/combos para ver la tabla cargada
+// Visitá https://bloomlife-proxy.onrender.com/combos para ver la tabla cargada
 app.get('/combos', (req, res) => {
   const lista = Object.entries(COMBO_COMPONENTES).map(([combo, comps]) => ({
     combo,
     componentes: comps
   }));
   res.json({ total: lista.length, combos: lista });
+});
+
+// ── REGISTRO DE WEBHOOK ───────────────────────────────────────────────────────
+// Visitá https://bloomlife-proxy.onrender.com/registrar-webhook UNA SOLA VEZ
+// para que Tienda Nube empiece a avisar al servidor cuando se paga una orden.
+app.get('/registrar-webhook', async (req, res) => {
+  try {
+    const url = BASE + '/webhooks';
+    const body = {
+      event: 'order/paid',
+      url: 'https://bloomlife-proxy.onrender.com/webhook/orden-pagada'
+    };
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify(body)
+    });
+    const data = await response.json();
+    if (response.ok) {
+      res.json({ ok: true, mensaje: '✓ Webhook registrado correctamente', detalle: data });
+    } else {
+      res.json({ ok: false, mensaje: 'Error al registrar', detalle: data });
+    }
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── VER WEBHOOKS REGISTRADOS ──────────────────────────────────────────────────
+// Visitá https://bloomlife-proxy.onrender.com/ver-webhooks para confirmar
+app.get('/ver-webhooks', async (req, res) => {
+  try {
+    const response = await fetch(BASE + '/webhooks', { headers: HEADERS });
+    const data = await response.json();
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── PROXY PARA EL DASHBOARD (igual que antes) ─────────────────────────────────
