@@ -18,9 +18,6 @@ const HEADERS = {
 };
 
 // ── TABLA DE COMBOS ───────────────────────────────────────────────────────────
-// Cada combo indica qué SKUs descuenta y en qué cantidad.
-// Si agregás un combo nuevo, añadí una entrada con el nombre exacto de Tienda Nube
-// y los SKUs correspondientes.
 const COMBO_COMPONENTES = {
   'Glow your Mind Combo | Tremella + Melena de león + Ashwagandha | Gummies y Capsuals': [
     { sku: 'TREMELLAGUMMIES', cantidad: 1 },
@@ -70,7 +67,6 @@ const COMBO_COMPONENTES = {
     { sku: 'ASHWAGANDHAGUMMIES', cantidad: 1 },
     { sku: 'MELENAGUMMIES', cantidad: 1 },
   ],
-
   'Ultimate Balance Combo | Ashwagandha + Reishi + Cordyceps + Melena de León | Gummies': [
     { sku: 'ASHWAGANDHAGUMMIES', cantidad: 1 },
     { sku: 'REISHIGUMMIES', cantidad: 1 },
@@ -124,112 +120,147 @@ const COMBO_COMPONENTES = {
 
 // ── FUNCIONES DE STOCK ────────────────────────────────────────────────────────
 
-async function descontarStockPorSKU(sku, cantidad) {
+async function buscarVariantePorSKU(sku) {
   const res = await fetch(BASE + '/products?per_page=200', { headers: HEADERS });
   const productos = await res.json();
-
-  let productoEncontrado = null;
-  let varianteEncontrada = null;
-
   for (const p of productos) {
     for (const v of p.variants || []) {
-      if (v.sku === sku) {
-        productoEncontrado = p;
-        varianteEncontrada = v;
-        break;
-      }
+      if (v.sku === sku) return { producto: p, variante: v };
     }
-    if (productoEncontrado) break;
   }
+  return null;
+}
 
-  if (!productoEncontrado) {
+async function descontarStockPorSKU(sku, cantidad) {
+  const encontrado = await buscarVariantePorSKU(sku);
+  if (!encontrado) {
     console.error(`[STOCK] SKU no encontrado: "${sku}"`);
     return { ok: false, motivo: 'SKU no encontrado' };
   }
-
-  const stockActual = varianteEncontrada.stock;
+  const { producto, variante } = encontrado;
+  const stockActual = variante.stock;
   if (stockActual === null || stockActual === undefined) {
     console.log(`[STOCK] SKU "${sku}" no maneja stock, se omite`);
     return { ok: true, motivo: 'Sin control de stock' };
   }
-
   const nuevoStock = Math.max(0, stockActual - cantidad);
-  const updateRes = await fetch(BASE + `/products/${productoEncontrado.id}/variants/${varianteEncontrada.id}`, {
-    method: 'PUT',
-    headers: HEADERS,
-    body: JSON.stringify({ stock: nuevoStock })
+  const updateRes = await fetch(BASE + `/products/${producto.id}/variants/${variante.id}`, {
+    method: 'PUT', headers: HEADERS, body: JSON.stringify({ stock: nuevoStock })
   });
-
   if (updateRes.ok) {
-    console.log(`[STOCK] ✓ SKU "${sku}": ${stockActual} → ${nuevoStock}`);
+    console.log(`[STOCK] ✓ Descuento SKU "${sku}": ${stockActual} → ${nuevoStock}`);
     return { ok: true, anterior: stockActual, nuevo: nuevoStock };
   } else {
     const err = await updateRes.text();
-    console.error(`[STOCK] ✗ Error actualizando SKU "${sku}":`, err);
+    console.error(`[STOCK] ✗ Error descontando SKU "${sku}":`, err);
     return { ok: false, motivo: err };
   }
 }
 
-async function procesarOrden(orden) {
+async function reintegrarStockPorSKU(sku, cantidad) {
+  const encontrado = await buscarVariantePorSKU(sku);
+  if (!encontrado) {
+    console.error(`[STOCK] SKU no encontrado para reintegro: "${sku}"`);
+    return { ok: false, motivo: 'SKU no encontrado' };
+  }
+  const { producto, variante } = encontrado;
+  const stockActual = variante.stock;
+  if (stockActual === null || stockActual === undefined) {
+    console.log(`[STOCK] SKU "${sku}" no maneja stock, se omite`);
+    return { ok: true, motivo: 'Sin control de stock' };
+  }
+  const nuevoStock = stockActual + cantidad;
+  const updateRes = await fetch(BASE + `/products/${producto.id}/variants/${variante.id}`, {
+    method: 'PUT', headers: HEADERS, body: JSON.stringify({ stock: nuevoStock })
+  });
+  if (updateRes.ok) {
+    console.log(`[STOCK] ✓ Reintegro SKU "${sku}": ${stockActual} → ${nuevoStock}`);
+    return { ok: true, anterior: stockActual, nuevo: nuevoStock };
+  } else {
+    const err = await updateRes.text();
+    console.error(`[STOCK] ✗ Error reintegrando SKU "${sku}":`, err);
+    return { ok: false, motivo: err };
+  }
+}
+
+async function procesarOrden(orden, operacion) {
   const productos = orden.products || [];
   const log = [];
-
   for (const item of productos) {
     const nombreProducto = item.name?.es || item.name?.en || Object.values(item.name || {})[0] || '';
     const cantidadVendida = item.quantity || 1;
     const componentes = COMBO_COMPONENTES[nombreProducto.trim()];
-
     if (componentes) {
-      console.log(`[WEBHOOK] Combo detectado: "${nombreProducto}" (x${cantidadVendida})`);
+      console.log(`[WEBHOOK] Combo detectado (${operacion}): "${nombreProducto}" (x${cantidadVendida})`);
       for (const comp of componentes) {
-        const resultado = await descontarStockPorSKU(comp.sku, comp.cantidad * cantidadVendida);
+        const resultado = operacion === 'descontar'
+          ? await descontarStockPorSKU(comp.sku, comp.cantidad * cantidadVendida)
+          : await reintegrarStockPorSKU(comp.sku, comp.cantidad * cantidadVendida);
         log.push({ combo: nombreProducto, sku: comp.sku, ...resultado });
       }
     }
   }
-
   return log;
 }
 
-// ── WEBHOOK DE TIENDA NUBE ────────────────────────────────────────────────────
+// ── WEBHOOK ORDEN PAGADA ──────────────────────────────────────────────────────
 app.post('/webhook/orden-pagada', async (req, res) => {
   res.status(200).json({ recibido: true });
   try {
     const orden = req.body;
     const ordenId = orden.id || orden.number || 'desconocida';
-    console.log(`[WEBHOOK] Orden recibida: #${ordenId}`);
-    const resultados = await procesarOrden(orden);
-    if (resultados.length === 0) {
-      console.log(`[WEBHOOK] Orden #${ordenId}: sin combos, nada que descontar`);
-    } else {
-      console.log(`[WEBHOOK] Orden #${ordenId}: ${resultados.length} descuentos procesados`);
-    }
+    console.log(`[WEBHOOK] Orden pagada: #${ordenId}`);
+    const resultados = await procesarOrden(orden, 'descontar');
+    console.log(`[WEBHOOK] Orden #${ordenId}: ${resultados.length} operaciones procesadas`);
   } catch (e) {
-    console.error('[WEBHOOK] Error procesando orden:', e.message);
+    console.error('[WEBHOOK] Error procesando orden pagada:', e.message);
+  }
+});
+
+// ── WEBHOOK ORDEN CANCELADA ───────────────────────────────────────────────────
+app.post('/webhook/orden-cancelada', async (req, res) => {
+  res.status(200).json({ recibido: true });
+  try {
+    const orden = req.body;
+    const ordenId = orden.id || orden.number || 'desconocida';
+    console.log(`[WEBHOOK] Orden cancelada: #${ordenId}`);
+    const resultados = await procesarOrden(orden, 'reintegrar');
+    console.log(`[WEBHOOK] Orden #${ordenId}: ${resultados.length} reintegros procesados`);
+  } catch (e) {
+    console.error('[WEBHOOK] Error procesando orden cancelada:', e.message);
   }
 });
 
 // ── ENDPOINTS DE DIAGNÓSTICO ──────────────────────────────────────────────────
 app.get('/combos', (req, res) => {
-  const lista = Object.entries(COMBO_COMPONENTES).map(([combo, comps]) => ({
-    combo, componentes: comps
-  }));
+  const lista = Object.entries(COMBO_COMPONENTES).map(([combo, comps]) => ({ combo, componentes: comps }));
   res.json({ total: lista.length, combos: lista });
 });
 
 app.get('/registrar-webhook', async (req, res) => {
   try {
     const response = await fetch(BASE + '/webhooks', {
-      method: 'POST',
-      headers: HEADERS,
-      body: JSON.stringify({
-        event: 'order/paid',
-        url: 'https://bloomlife-proxy.onrender.com/webhook/orden-pagada'
-      })
+      method: 'POST', headers: HEADERS,
+      body: JSON.stringify({ event: 'order/paid', url: 'https://bloomlife-proxy.onrender.com/webhook/orden-pagada' })
     });
     const data = await response.json();
     res.json(response.ok
-      ? { ok: true, mensaje: '✓ Webhook registrado correctamente', detalle: data }
+      ? { ok: true, mensaje: '✓ Webhook order/paid registrado', detalle: data }
+      : { ok: false, mensaje: 'Error al registrar', detalle: data });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/registrar-webhook-cancelacion', async (req, res) => {
+  try {
+    const response = await fetch(BASE + '/webhooks', {
+      method: 'POST', headers: HEADERS,
+      body: JSON.stringify({ event: 'order/cancelled', url: 'https://bloomlife-proxy.onrender.com/webhook/orden-cancelada' })
+    });
+    const data = await response.json();
+    res.json(response.ok
+      ? { ok: true, mensaje: '✓ Webhook order/cancelled registrado', detalle: data }
       : { ok: false, mensaje: 'Error al registrar', detalle: data });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -260,11 +291,7 @@ app.get('/stock-suplementos', async (req, res) => {
       for (const v of p.variants || []) {
         if (SKUS_SUPLEMENTOS.includes(v.sku)) {
           const nombre = p.name?.es || p.name?.en || Object.values(p.name || {})[0] || '';
-          suplementos.push({
-            sku: v.sku,
-            nombre,
-            stock: v.stock !== null && v.stock !== undefined ? v.stock : 'sin control'
-          });
+          suplementos.push({ sku: v.sku, nombre, stock: v.stock !== null && v.stock !== undefined ? v.stock : 'sin control' });
         }
       }
     }
