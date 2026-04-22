@@ -184,6 +184,15 @@ async function reintegrarStockPorSKU(sku, cantidad) {
 }
 
 async function procesarOrden(orden, operacion) {
+  // Si la orden no trae productos, la buscamos en la API
+  if (!orden.products || orden.products.length === 0) {
+    const ordenId = orden.id;
+    console.log(`[WEBHOOK] Buscando productos de orden #${ordenId} en la API...`);
+    const res = await fetch(BASE + `/orders/${ordenId}`, { headers: HEADERS });
+    const ordenCompleta = await res.json();
+    orden = ordenCompleta;
+    console.log(`[WEBHOOK] Productos encontrados: ${(ordenCompleta.products||[]).map(p=>p.name?.es||p.name?.en||"?").join(", ")}`);
+  }
   const productos = orden.products || [];
   const log = [];
   for (const item of productos) {
