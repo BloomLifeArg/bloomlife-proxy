@@ -240,9 +240,7 @@ const NOMBRES_F=new Set(['maria','ana','laura','carolina','andrea','patricia','c
 const NOMBRES_M=new Set(['juan','carlos','luis','jose','jorge','roberto','diego','pablo','daniel','sergio','miguel','alejandro','gabriel','martin','nicolas','andres','gustavo','ricardo','marcelo','alberto','hector','oscar','hernan','mario','raul','fernando','pedro','ariel','leandro','federico','ignacio','maximiliano','sebastian','christian','matias','facundo','ezequiel','rodrigo','joaquin','santiago','franco','gonzalo','walter','hugo','ruben','javier','dante','ramiro','emilio','nahuel','agustin','lucas','tomas','marcos','lautaro','julian','alan','brian','kevin','ivan','enzo','maximo','thiago','benicio','bautista','valentino','gael','luca','benjamin','alexander','alexis','cristian','damian','esteban','francisco','manuel','antonio','eduardo','alfredo','ernesto','horacio','abel','cesar','german','claudio','omar','felix','victor','angel','rafael','luciano','mariano','fabian','david','joel','simon','patricio','augusto','emiliano','leonel','axel','norberto','gerardo','rolando','armando','nelson','arturo','silvio','renato','cristobal','mauricio','lisandro','salvador','adolfo']);
  
 function inferGender(n){if(!n)return'unknown';const f=n.trim().split(/\s+/)[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');if(NOMBRES_F.has(f))return'F';if(NOMBRES_M.has(f))return'M';if(f.endsWith('a')&&!f.endsWith('oa')&&f.length>3)return'F';return'unknown';}
-function extractDNI(id){if(!id)return null;const c=id.replace(/[^0-9]/g,'');if(c.length===11)return parseInt(c.slice(2,10));if(c.length>=7&&c.length<=8)return parseInt(c);return null;}
-function dniToAgeRange(d){if(!d||isNaN(d))return null;if(d<4000000)return'70+';if(d<8000000)return'60-69';if(d<14000000)return'50-59';if(d<20000000)return'40-49';if(d<26000000)return'35-39';if(d<30000000)return'30-34';if(d<34000000)return'25-29';if(d<38000000)return'20-24';if(d<42000000)return'15-19';return'<15';}
-const AGE_ORDER=['<15','15-19','20-24','25-29','30-34','35-39','40-49','50-59','60-69','70+'];
+ 
  
 function doLogin(){const v=document.getElementById('pwInput').value;if(v===PASSWORD){sessionStorage.setItem('bl_auth','ok');document.getElementById('loginOverlay').style.display='none';init();}else{document.getElementById('loginErr').style.display='block';}}
 window.addEventListener('DOMContentLoaded',()=>{if(sessionStorage.getItem('bl_auth')==='ok'){document.getElementById('loginOverlay').style.display='none';init();}});
@@ -423,17 +421,15 @@ function renderAll(){
     cl.forEach(c=>{gC[c.gender]++;gR[c.gender]+=c.rev;if(c.gender!=='unknown')gO[c.gender]+=c.orders;});
     const classified=gC.M+gC.F,covPct=Math.round(classified/tot*100);
     const avgTM=gO.M?gR.M/gO.M:0,avgTF=gO.F?gR.F/gO.F:0;
-    const cityMap={},provM={},domMap={},newBM={},ageMap={};let ageCl=0;
-    cl.forEach(c=>{if(c.city){const k=c.city.trim();if(!cityMap[k])cityMap[k]={count:0,rev:0};cityMap[k].count++;cityMap[k].rev+=c.rev;}if(c.province){const k=c.province.trim();if(!provM[k])provM[k]={count:0,rev:0};provM[k].count++;provM[k].rev+=c.rev;}const dom=c.email.split('@')[1]||'otro';domMap[dom]=(domMap[dom]||0)+1;const mk=c.first.slice(0,7);newBM[mk]=(newBM[mk]||0)+1;const dni=extractDNI(c.identification),ar=dniToAgeRange(dni);if(ar){ageCl++;if(!ageMap[ar])ageMap[ar]={count:0,rev:0};ageMap[ar].count++;ageMap[ar].rev+=c.rev;}});
+    const cityMap={},provM={},domMap={},newBM={};
+    cl.forEach(c=>{if(c.city){const k=c.city.trim();if(!cityMap[k])cityMap[k]={count:0,rev:0};cityMap[k].count++;cityMap[k].rev+=c.rev;}if(c.province){const k=c.province.trim();if(!provM[k])provM[k]={count:0,rev:0};provM[k].count++;provM[k].rev+=c.rev;}const dom=c.email.split('@')[1]||'otro';domMap[dom]=(domMap[dom]||0)+1;const mk=c.first.slice(0,7);newBM[mk]=(newBM[mk]||0)+1;});
     const topCities=Object.entries(cityMap).sort((a,b)=>b[1].count-a[1].count).slice(0,12);
     const topProvs=Object.entries(provM).sort((a,b)=>b[1].count-a[1].count).slice(0,10);
     const maxProvD=topProvs.length?topProvs[0][1].count:1;
     const topDomains=Object.entries(domMap).sort((a,b)=>b[1]-a[1]).slice(0,6);
     const nmk=Object.keys(newBM).sort().slice(-8),nml=nmk.map(k=>{const[y,m]=k.split('-');return mNames[parseInt(m)-1]+"'"+y.slice(2);}),nmv=nmk.map(k=>newBM[k]);
-    const ageRanges=AGE_ORDER.filter(r=>ageMap[r]),maxAge=Math.max(...ageRanges.map(r=>ageMap[r].count),1);
-    const ageCrossData=ageRanges.map(r=>({range:r,count:ageMap[r].count,rev:ageMap[r].rev,pct:(ageMap[r].count/ageCl*100).toFixed(1),avgTicket:ageMap[r].count?ageMap[r].rev/ageMap[r].count:0}));
     const withPhone=cl.filter(c=>c.phone&&c.phone.length>4).length,withId=cl.filter(c=>c.identification&&c.identification.length>3).length;
-    return{total:tot,classified,coveragePct:covPct,gCount:gC,gRev:gR,avgTicketM:avgTM,avgTicketF:avgTF,topCities,topProvs,maxProvD,topDomains,newMonthLabels:nml,newMonthVals:nmv,withPhone,withId,ageMap,ageRanges,maxAge,ageCoveragePct:Math.round(ageCl/tot*100),ageClassified:ageCl,ageCrossData};
+    return{total:tot,classified,coveragePct:covPct,gCount:gC,gRev:gR,avgTicketM:avgTM,avgTicketF:avgTF,topCities,topProvs,maxProvD,topDomains,newMonthLabels:nml,newMonthVals:nmv,withPhone,withId};
   })();
  
   const b2bTotalCobrado = FIN_B2B.filter(b=>b.status==='Cobrado').reduce((s,b)=>s+parseFloat(b.monto||0),0);
@@ -746,14 +742,7 @@ function renderAll(){
       <div style="display:flex;gap:16px;margin-top:10px"><span style="font-size:11px;color:#993556">■ Mujeres</span><span style="font-size:11px;color:#185FA5">■ Hombres</span><span style="font-size:11px;color:#b4b2a8">■ Sin clasificar</span></div>
       <div class="coverage-note">⚠ Clasificación por heurística de nombres. Resultados orientativos.</div>
     </div>
-    <div class="sec-label">Distribución por edad</div>
-    ${demoData.ageRanges.length===0?'<div class="card"><div class="empty">Sin datos de DNI/CUIL para estimar edades.</div></div>':`
-    <div class="kpis">${demoData.ageCrossData.slice(0,4).map(a=>`<div class="kpi"><div class="kpi-label">${a.range} años</div><div class="kpi-value">${a.pct}%</div><div class="kpi-sub">${fmtN(a.count)} clientes · ${fmt(a.avgTicket)} ticket</div></div>`).join('')}</div>
-    <div class="grid2">
-      <div class="card"><div class="card-title">Clientes por edad <span style="font-size:11px;font-weight:400;color:#999">${demoData.ageCoveragePct}% cobertura</span></div><div class="chart-wrap" style="height:200px"><canvas id="chartAge"></canvas></div></div>
-      <div class="card"><div class="card-title">Facturación por edad</div><div class="chart-wrap" style="height:200px"><canvas id="chartAgeRev"></canvas></div></div>
-    </div>
-    <div class="card"><div class="card-title">Detalle por rango</div><table class="tbl"><thead><tr><th>Rango</th><th>Clientes</th><th>% del total</th><th>Ticket prom.</th></tr></thead><tbody>${demoData.ageCrossData.map(a=>`<tr><td style="font-weight:600">${a.range} años</td><td>${fmtN(a.count)}</td><td><div style="display:flex;align-items:center;gap:6px"><div class="progress-wrap" style="width:50px"><div class="progress-bar" style="width:${Math.round(a.count/demoData.maxAge*100)}%"></div></div><span style="font-size:11px;color:#999">${a.pct}%</span></div></td><td>${fmt(a.avgTicket)}</td></tr>`).join('')}</tbody></table><div class="coverage-note">⚠ Estimación por DNI secuencial. Rangos aproximados ±3 años.</div></div>`}
+ 
     <div class="grid2">
       <div class="card"><div class="card-title">Top ciudades</div>${demoData.topCities.map(([city,v])=>`<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span style="font-weight:500">${city}</span><span style="color:#999">${fmtN(v.count)} clientes</span></div><div class="progress-wrap"><div class="progress-bar" style="width:${Math.round(v.count/demoData.topCities[0][1].count*100)}%"></div></div></div>`).join('')}</div>
       <div class="card"><div class="card-title">Provincias</div>${demoData.topProvs.map(([p,v])=>`<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span style="font-weight:500">${p}</span><span style="color:#999">${fmtN(v.count)} · ${fmt(v.rev)}</span></div><div class="progress-wrap"><div class="progress-bar" style="width:${Math.round(v.count/demoData.maxProvD*100)}%"></div></div></div>`).join('')}</div>
@@ -980,10 +969,7 @@ function renderAll(){
     }
     if(demoData){
       mkChart('chartNewCusts','bar',demoData.newMonthLabels,[{data:demoData.newMonthVals,backgroundColor:'#1D9E75',borderRadius:4}],{scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},beginAtZero:true}}}});
-      if(demoData.ageRanges.length>0){
-        mkChart('chartAge','bar',demoData.ageRanges,[{data:demoData.ageRanges.map(r=>demoData.ageMap[r].count),backgroundColor:'#1D9E75',borderRadius:4}],{scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},beginAtZero:true}}}});
-        mkChart('chartAgeRev','bar',demoData.ageRanges,[{data:demoData.ageRanges.map(r=>Math.round(demoData.ageMap[r].rev)),backgroundColor:'#5DCAA5',borderRadius:4}],{scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},callback:tickY}}}});
-      }
+ 
     }
     setTimeout(()=>buildMap(provMap),200);
   },150);
@@ -1094,7 +1080,7 @@ const allMonths=()=>{
 function b2cRevByMonth(){const map={};(typeof FILTERED_ORDERS!=='undefined'?FILTERED_ORDERS:[]).filter(o=>o.payment_status==='paid').forEach(o=>{const k=o.created_at?.slice(0,7);if(k)map[k]=(map[k]||0)+parseFloat(o.total||0);});return map;}
 function b2bRevByMonth(){const map={};FIN_B2B.filter(b=>b.status==='Cobrado').forEach(b=>{const k=b.fecha?.slice(0,7);if(k)map[k]=(map[k]||0)+parseFloat(b.monto||0);});return map;}
 function cogsByMonth(){const map={};const tc=FIN_TC;const lf=parseFloat(document.getElementById('landed-factor')?.value||FIN_LANDED_FACTOR||2.3);const avgFOB=FIN_COSTOS.reduce((s,c)=>s+c.fob,0)/FIN_COSTOS.length;const avgLanded=avgFOB*tc*lf;(typeof FILTERED_ORDERS!=='undefined'?FILTERED_ORDERS:[]).filter(o=>o.payment_status==='paid').forEach(o=>{const k=o.created_at?.slice(0,7);if(!k)return;const units=(o.products||[]).reduce((s,p)=>s+(p.quantity||1),0);map[k]=(map[k]||0)+units*avgLanded;});FIN_B2B.filter(b=>b.status==='Cobrado').forEach(b=>{const k=b.fecha?.slice(0,7);if(!k)return;map[k]=(map[k]||0)+(parseInt(b.unidades||1))*avgLanded;});return map;}
-function mktgByMonth(){const map={};Object.entries(FIN_MKTG).forEach(([month,lines])=>{let total=0;Object.values(lines).forEach(v=>{total+=parseFloat(v||0);});if(total)map[month]=total;});FIN_GASTOS.filter(g=>g.categoria==='Marketing').forEach(g=>{const k=g.fecha?.slice(0,7);if(k)map[k]=(map[k]||0)+parseFloat(g.monto||0);});return map;}
+function mktgByMonth(){const map={};Object.entries(FIN_MKTG).forEach(([month,lines])=>{let total=0;Object.entries(lines).forEach(([k,v])=>{if(k.endsWith('_a'))total+=parseFloat(v||0);});if(total)map[month]=total;});FIN_GASTOS.filter(g=>g.categoria==='Marketing').forEach(g=>{const k=g.fecha?.slice(0,7);if(k)map[k]=(map[k]||0)+parseFloat(g.monto||0);});return map;}
 function opexByMonth(){const map={};FIN_GASTOS.filter(g=>g.categoria!=='Marketing').forEach(g=>{const k=g.fecha?.slice(0,7);if(k)map[k]=(map[k]||0)+parseFloat(g.monto||0);});return map;}
 function unitsB2CByMonth(){const map={};(typeof FILTERED_ORDERS!=='undefined'?FILTERED_ORDERS:[]).filter(o=>o.payment_status==='paid').forEach(o=>{const k=o.created_at?.slice(0,7);if(!k)return;const units=(o.products||[]).reduce((s,p)=>s+(p.quantity||1),0);map[k]=(map[k]||0)+units;});return map;}
  
