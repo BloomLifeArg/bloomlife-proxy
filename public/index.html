@@ -129,6 +129,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .cf-row.total-row{font-weight:700;font-size:13px;background:#f0fdf8;border:none}
 .cf-row.subtotal{font-weight:600;background:#fafaf8}
 .cf-val{font-weight:600}
+/* ── RESUMEN SIGNAL CARDS ── */
+.signal-card{background:#fff;border:1px solid #e8e8e4;border-radius:14px;padding:16px 18px;position:relative;overflow:hidden}
+.signal-card::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;border-radius:4px 0 0 4px}
+.signal-card.good::before{background:#1D9E75}
+.signal-card.warn::before{background:#EF9F27}
+.signal-card.bad::before{background:#D85A30}
+.signal-card.neutral::before{background:#e0e0db}
+.signal-label{font-size:11px;color:#999;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.signal-value{font-size:26px;font-weight:800;color:#1a1a1a;line-height:1;margin-bottom:4px}
+.signal-sub{font-size:11px;color:#999}
+.signal-rule{font-size:10px;margin-top:6px;padding:3px 8px;border-radius:20px;display:inline-block;font-weight:600}
+.signal-rule.good{background:#E1F5EE;color:#0F6E56}
+.signal-rule.warn{background:#FAEEDA;color:#854F0B}
+.signal-rule.bad{background:#FCEBEB;color:#A32D2D}
+.signal-rule.neutral{background:#f0f0ec;color:#666}
 @media(max-width:540px){.grid2{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}.nav-group-label{display:none}.mktg-line{grid-template-columns:1fr 1fr 1fr;}.mktg-line span:first-child{grid-column:1/-1;font-weight:600}}
 </style>
 </head>
@@ -423,6 +438,70 @@ function renderAll(){
  
   const b2bTotalCobrado = FIN_B2B.filter(b=>b.status==='Cobrado').reduce((s,b)=>s+parseFloat(b.monto||0),0);
  
+  // ── UNIT ECONOMICS CALCULATIONS ──────────────────────────────────────────
+  // Clientes activos últimos 90 días
+  const d90=new Date(now);d90.setDate(now.getDate()-90);
+  const activeClients90=new Set(paid.filter(o=>new Date(o.created_at)>=d90).map(o=>o.customer?.email).filter(Boolean)).size;
+ 
+  // Nuevos clientes este mes (primera compra en este mes)
+  const firstPurchaseByEmail={};
+  paid.forEach(o=>{const e=o.customer?.email;if(!e)return;if(!firstPurchaseByEmail[e]||o.created_at<firstPurchaseByEmail[e])firstPurchaseByEmail[e]=o.created_at;});
+  const newClientsThisMonth=Object.values(firstPurchaseByEmail).filter(d=>new Date(d)>=m0).length;
+ 
+  // ARPU anual = Revenue últimos 6 meses / clientes únicos últimos 6m × 2
+  const d6m=new Date(now);d6m.setMonth(now.getMonth()-6);
+  const paid6m=paid.filter(o=>new Date(o.created_at)>=d6m);
+  const rev6m=paid6m.reduce((s,o)=>s+parseFloat(o.total||0),0);
+  const clients6m=new Set(paid6m.map(o=>o.customer?.email).filter(Boolean)).size;
+  const arpu=clients6m?rev6m/clients6m*2:0;
+ 
+  // Órdenes por cliente (anual) = pedidos 12m / clientes 12m
+  const d12m=new Date(now);d12m.setFullYear(now.getFullYear()-1);
+  const paid12m=paid.filter(o=>new Date(o.created_at)>=d12m);
+  const clients12m=new Set(paid12m.map(o=>o.customer?.email).filter(Boolean)).size;
+  const ordersPerClient=clients12m?paid12m.length/clients12m:0;
+ 
+  // LTV = ARPU × gross margin estimado (o ARPU si no hay costos configurados)
+  const avgFOB=FIN_COSTOS.length?FIN_COSTOS.reduce((s,c)=>s+c.fob,0)/FIN_COSTOS.length:0;
+  const avgLandedUnit=avgFOB*FIN_TC*(parseFloat(FIN_LANDED_FACTOR)||2.3);
+  const grossMarginPct=avgTicket>0&&avgLandedUnit>0?Math.max(0,(avgTicket-avgLandedUnit)/avgTicket):null;
+  const ltvCalc=grossMarginPct!==null?arpu*grossMarginPct:arpu;
+ 
+  // CAC = marketing spend 6m / nuevos clientes 6m
+  const mktgMap=mktgByMonth();
+  const mktgSpend6m=Object.keys(mktgMap).filter(k=>k>=d6m.toISOString().slice(0,7)).reduce((s,k)=>s+(mktgMap[k]||0),0);
+  const newClients6m=Object.values(firstPurchaseByEmail).filter(d=>new Date(d)>=d6m).length;
+  const cac=newClients6m>0&&mktgSpend6m>0?mktgSpend6m/newClients6m:0;
+  const ltvCac=cac>0?ltvCalc/cac:null;
+ 
+  // % recompra a 30 / 60 / 90 días
+  const calcRecompra=(days)=>{
+    const cutoff=new Date(now);cutoff.setDate(now.getDate()-days);
+    const prevEmails=new Set(paid.filter(o=>new Date(o.created_at)<cutoff).map(o=>o.customer?.email).filter(Boolean));
+    const windowBuyers=paid.filter(o=>{const d=new Date(o.created_at);return d>=cutoff&&d<=now;}).map(o=>o.customer?.email).filter(Boolean);
+    if(!windowBuyers.length)return 0;
+    const rec=windowBuyers.filter(e=>prevEmails.has(e)).length;
+    return+(rec/windowBuyers.length*100).toFixed(1);
+  };
+  const recompra30=calcRecompra(30),recompra60=calcRecompra(60),recompra90=calcRecompra(90);
+ 
+  // Suscripción % del revenue últimos 6m
+  const subRev6m=subPaid.filter(o=>new Date(o.created_at)>=d6m).reduce((s,o)=>s+parseFloat(o.total||0),0);
+  const subRevPct6m=rev6m>0?(subRev6m/rev6m*100).toFixed(1):0;
+ 
+  // Nuevos clientes por mes (últimos 6 meses) para gráfico
+  const newClientsByMonth=mLast6.map(k=>{
+    const[y,mo]=k.split('-'),mStart=new Date(parseInt(y),parseInt(mo)-1,1),mEnd=new Date(parseInt(y),parseInt(mo),1);
+    return Object.values(firstPurchaseByEmail).filter(d=>new Date(d)>=mStart&&new Date(d)<mEnd).length;
+  });
+ 
+  // Signal card helper
+  const signalClass=(val,goodThresh,warnThresh,higher=true)=>{
+    if(val===null||val===undefined||isNaN(val))return'neutral';
+    if(higher){return val>=goodThresh?'good':val>=warnThresh?'warn':'bad';}
+    return val<=goodThresh?'good':val<=warnThresh?'warn':'bad';
+  };
+ 
   window._skuMonthlyMap = skuMonthlyMap;
   window._allMonthKeys = allMonthKeys;
   window._monthlyMap = monthlyMap;
@@ -430,23 +509,132 @@ function renderAll(){
   window._monthlyOrdersMap = monthlyOrdersMap;
  
   document.getElementById('main').innerHTML=`
+  <!-- ══════════════════════════════════════════════════ -->
+  <!-- RESUMEN — nueva estructura                        -->
+  <!-- ══════════════════════════════════════════════════ -->
   <div id="sec-resumen" class="section active">
-    <div class="sec-label">Resumen general</div>
-    <div class="kpis">
-      <div class="kpi"><div class="kpi-label">Ingresos este mes</div><div class="kpi-value">${fmt(revM)}</div><div class="kpi-sub ${growth!==null&&parseFloat(growth)>=0?'up':'down'}">${growth!==null?(parseFloat(growth)>=0?'▲':'▼')+' '+Math.abs(growth)+'% vs mes ant.':'Primer mes'}</div></div>
-      <div class="kpi"><div class="kpi-label">Revenue total</div><div class="kpi-value">${fmt(totalRev+b2bTotalCobrado)}</div><div class="kpi-sub">B2C ${fmt(totalRev)} + B2B ${fmt(b2bTotalCobrado)}</div></div>
-      <div class="kpi"><div class="kpi-label">Ticket promedio</div><div class="kpi-value">${fmt(avgTicket)}</div><div class="kpi-sub">por pedido pagado</div></div>
-      <div class="kpi"><div class="kpi-label">Clientes únicos</div><div class="kpi-value">${fmtN(customers.length)}</div><div class="kpi-sub">${retRate}% recurrentes</div></div>
-      <div class="kpi"><div class="kpi-label">Pedidos este mes</div><div class="kpi-value">${fmtN(pM.length)}</div><div class="kpi-sub">${fmtN(pL.length)} el mes pasado</div></div>
-      <div class="kpi"><div class="kpi-label">Productos</div><div class="kpi-value">${fmtN(ALL_PRODUCTS.length)}</div><div class="kpi-sub">en catálogo</div></div>
+ 
+    <!-- 1. NEGOCIO -->
+    <div class="sec-label">🔹 Negocio — mes actual</div>
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+      <div class="kpi">
+        <div class="kpi-label">Revenue mes</div>
+        <div class="kpi-value">${fmt(revM)}</div>
+        <div class="kpi-sub ${growth!==null&&parseFloat(growth)>=0?'up':'down'}">${growth!==null?(parseFloat(growth)>=0?'▲':'▼')+' '+Math.abs(growth)+'% vs mes ant.':'Primer mes'}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Clientes activos</div>
+        <div class="kpi-value">${fmtN(activeClients90)}</div>
+        <div class="kpi-sub">últimos 90 días</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Nuevos clientes</div>
+        <div class="kpi-value">${fmtN(newClientsThisMonth)}</div>
+        <div class="kpi-sub">este mes</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">% Recurrentes</div>
+        <div class="kpi-value ${parseFloat(retRate)>=30?'up':parseFloat(retRate)>=15?'':'down'}">${retRate}%</div>
+        <div class="kpi-sub">${fmtN(returning)} de ${fmtN(customers.length)} clientes</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">AOV (ticket prom.)</div>
+        <div class="kpi-value">${fmt(avgTicket)}</div>
+        <div class="kpi-sub">por pedido pagado</div>
+      </div>
     </div>
-    <div class="sec-label">Ingresos mensuales</div>
-    <div class="card"><div class="chart-wrap" style="height:200px"><canvas id="chartMonthly"></canvas></div></div>
+ 
+    <!-- 2. UNIT ECONOMICS -->
+    <div class="sec-label">🔹 Unit Economics — el corazón del negocio</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:1.25rem">
+ 
+      <div class="signal-card ${signalClass(cac,0,0,false)} ${cac===0?'neutral':''}">
+        <div class="signal-label">CAC</div>
+        <div class="signal-value">${cac>0?fmt(cac):'—'}</div>
+        <div class="signal-sub">${cac>0?'costo adquirir 1 cliente':'Sin datos de marketing'}</div>
+        ${cac>0?`<span class="signal-rule neutral">Mktg 6m ÷ nuevos clientes</span>`:''}
+      </div>
+ 
+      <div class="signal-card neutral">
+        <div class="signal-label">ARPU anual</div>
+        <div class="signal-value">${arpu>0?fmt(arpu):'—'}</div>
+        <div class="signal-sub">revenue por cliente × 2</div>
+        <span class="signal-rule neutral">Últimos 6 meses</span>
+      </div>
+ 
+      <div class="signal-card neutral">
+        <div class="signal-label">LTV</div>
+        <div class="signal-value">${ltvCalc>0?fmt(ltvCalc):'—'}</div>
+        <div class="signal-sub">${grossMarginPct!==null?'ARPU × margen '+(grossMarginPct*100).toFixed(0)+'%':'ARPU directo (sin margen)'}</div>
+        <span class="signal-rule neutral">Valor de vida del cliente</span>
+      </div>
+ 
+      <div class="signal-card ${signalClass(ltvCac,3,1.5)}">
+        <div class="signal-label">LTV / CAC</div>
+        <div class="signal-value">${ltvCac!==null?ltvCac.toFixed(1)+'x':'—'}</div>
+        <div class="signal-sub">${ltvCac!==null?(ltvCac>=3?'✓ Negocio saludable':ltvCac>=1.5?'⚠ Mejorable':'✗ Revisar urgente'):'Cargá marketing para calcular'}</div>
+        ${ltvCac!==null?`<span class="signal-rule ${signalClass(ltvCac,3,1.5)}">${ltvCac>=3?'> 3x — Bien':'ltvCac>=1.5 — Ok < 3x'}</span>`:''}
+      </div>
+ 
+      <div class="signal-card ${signalClass(ordersPerClient,3,1.5)}">
+        <div class="signal-label">Órdenes / cliente</div>
+        <div class="signal-value">${ordersPerClient.toFixed(1)}</div>
+        <div class="signal-sub">últimos 12 meses</div>
+        <span class="signal-rule ${signalClass(ordersPerClient,3,1.5)}">${ordersPerClient>=3?'> 3 — Muy bien':ordersPerClient>=1.5?'> 1.5 — Ok':'< 1.5 — Mejorar'}</span>
+      </div>
+ 
+    </div>
+ 
+    <!-- 3. CRECIMIENTO -->
+    <div class="sec-label">🔹 Crecimiento — últimos 6 meses</div>
     <div class="grid2">
-      <div class="card"><div class="card-title">Estado de pedidos</div>${Object.entries(statusCount).map(([s,c])=>`<div class="row-item"><span>${statusBadge(s)}</span><span style="font-weight:600">${fmtN(c)}</span></div>`).join('')}</div>
-      <div class="card"><div class="card-title">Pedidos recientes</div><table class="tbl"><thead><tr><th>#</th><th>Cliente</th><th>Total</th><th>Estado</th></tr></thead><tbody>${[...orders].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,6).map(o=>`<tr><td style="color:#999">${o.number}</td><td style="max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.customer?.name||o.contact_name||'—'}</td><td>${fmt(parseFloat(o.total||0))}</td><td>${statusBadge(o.payment_status)}</td></tr>`).join('')}</tbody></table></div>
+      <div class="card">
+        <div class="card-title">Nuevos clientes por mes</div>
+        <div class="chart-wrap" style="height:180px"><canvas id="chartNuevosClientes"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Revenue por mes</div>
+        <div class="chart-wrap" style="height:180px"><canvas id="chartRevenueMes"></canvas></div>
+      </div>
     </div>
+ 
+    <!-- 4. RETENCIÓN -->
+    <div class="sec-label">🔹 Retención</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:1.25rem">
+ 
+      <div class="signal-card ${signalClass(recompra30,30,15)}">
+        <div class="signal-label">Recompra 30 días</div>
+        <div class="signal-value">${recompra30}%</div>
+        <div class="signal-sub">compradores recurrentes</div>
+        <span class="signal-rule ${signalClass(recompra30,30,15)}">${recompra30>=30?'≥ 30% — Bien':recompra30>=15?'≥ 15% — Regular':'< 15% — Atención'}</span>
+      </div>
+ 
+      <div class="signal-card ${signalClass(recompra60,30,15)}">
+        <div class="signal-label">Recompra 60 días</div>
+        <div class="signal-value">${recompra60}%</div>
+        <div class="signal-sub">compradores recurrentes</div>
+        <span class="signal-rule ${signalClass(recompra60,30,15)}">${recompra60>=30?'≥ 30% — Bien':recompra60>=15?'≥ 15% — Regular':'< 15% — Atención'}</span>
+      </div>
+ 
+      <div class="signal-card ${signalClass(recompra90,30,15)}">
+        <div class="signal-label">Recompra 90 días</div>
+        <div class="signal-value">${recompra90}%</div>
+        <div class="signal-sub">compradores recurrentes</div>
+        <span class="signal-rule ${signalClass(recompra90,30,15)}">${recompra90>=30?'≥ 30% — Bien':recompra90>=15?'≥ 15% — Regular':'< 15% — Atención'}</span>
+      </div>
+ 
+      <div class="signal-card ${subRevPct6m>0?'good':'neutral'}">
+        <div class="signal-label">Suscripción</div>
+        <div class="signal-value">${subRevPct6m}%</div>
+        <div class="signal-sub">${subRevPct6m>0?`${fmt(subRev6m)} de ${fmt(rev6m)} (6m)`:'Sin revenue por suscripción'}</div>
+        <span class="signal-rule ${subRevPct6m>0?'good':'neutral'}">${fmtN(activeSubLast30.length)} suscriptores activos</span>
+      </div>
+ 
+    </div>
+ 
   </div>
+  <!-- ══════════════════════════════════════════════════ -->
+ 
   <div id="sec-ventas" class="section">
     <div class="sec-label">Ventas últimos 30 días</div>
     <div class="card"><div class="chart-wrap" style="height:180px"><canvas id="chartDaily"></canvas></div></div>
@@ -464,6 +652,7 @@ function renderAll(){
     </div>
     ${topCoupons.length>0?`<div class="card"><div class="card-title">Cupones más usados</div><table class="tbl"><thead><tr><th>Cupón</th><th>Usos</th><th>Descuento total</th><th>Ingresos generados</th></tr></thead><tbody>${topCoupons.map(([code,d])=>`<tr><td style="font-weight:600;font-family:monospace">${code}</td><td>${fmtN(d.uses)}</td><td class="down">${fmt(d.discount)}</td><td>${fmt(d.rev)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="card"><div class="empty">Sin cupones registrados</div></div>'}
   </div>
+ 
   <div id="sec-recompra" class="section">
     <div class="sec-label">Tasa de recompra mes a mes</div>
     <div class="card"><div class="chart-wrap" style="height:220px"><canvas id="chartRecompra"></canvas></div></div>
@@ -473,11 +662,13 @@ function renderAll(){
     <div id="recompra-detail"></div>
     <div class="card" style="margin-top:12px"><div class="card-title">Resumen mensual</div><table class="tbl"><thead><tr><th>Mes</th><th>Compradores</th><th>Nuevos</th><th>Recurrentes</th><th>% Recompra</th></tr></thead><tbody>${recompraData.map(r=>`<tr><td style="font-weight:600">${r.label}</td><td>${fmtN(r.total)}</td><td style="color:#185FA5">${fmtN(r.nuevos)}</td><td style="color:#1D9E75">${fmtN(r.recurrentes)}</td><td><span style="font-weight:700;color:${r.pct>=30?'#1D9E75':r.pct>=15?'#EF9F27':'#D85A30'}">${r.pct}%</span></td></tr>`).join('')}</tbody></table></div>
   </div>
+ 
   <div id="sec-canales" class="section">
     <div class="sec-label">Fuentes de tráfico y ventas</div>
     <div class="card"><div class="chart-wrap" style="height:${Math.max(180,sortedUtm.length*40+60)}px"><canvas id="chartUtm"></canvas></div></div>
     <div class="card"><div class="card-title">Detalle por canal</div><table class="tbl"><thead><tr><th>Canal</th><th>Pedidos</th><th>Ingresos</th><th>Participación</th></tr></thead><tbody>${sortedUtm.map(([k,d])=>`<tr><td style="font-weight:600">${k}</td><td>${fmtN(d.orders)}</td><td>${fmt(d.rev)}</td><td><div style="display:flex;align-items:center;gap:6px"><div class="progress-wrap" style="width:60px"><div class="progress-bar" style="width:${Math.round(d.rev/maxUtmRev*100)}%"></div></div><span style="font-size:11px;color:#999">${Math.round(d.rev/maxUtmRev*100)}%</span></div></td></tr>`).join('')}</tbody></table></div>
   </div>
+ 
   <div id="sec-productos" class="section">
     <div class="sec-label">Comparativo por formato</div>
     <div class="kpis">${[['Combos','combo','#1D9E75'],['Gummies','gummies','#5DCAA5'],['Cápsulas','capsulas','#EF9F27'],['Tabletas','tabletas','#185FA5'],['Otros','otro','#B4B2A9']].map(([l,k,c])=>fmtGroups[k]>0?`<div class="kpi"><div class="kpi-label" style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:${c};display:inline-block"></span>${l}</div><div class="kpi-value">${fmt(fmtGroups[k])}</div><div class="kpi-sub">${fmtN(sortedSkus.filter(([,d])=>d.fmt===k).reduce((s,[,d])=>s+d.qty,0))} uds.</div></div>`:'').join('')}</div>
@@ -490,6 +681,7 @@ function renderAll(){
     <div class="sec-label">Detalle completo</div>
     <div class="card"><table class="tbl"><thead><tr><th>Producto</th><th>Formato</th><th>Uds.</th><th>Ticket prom.</th><th>Ingresos</th><th>%</th></tr></thead><tbody>${sortedSkus.map(([n,d])=>`<tr><td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n}</td><td style="color:#999;font-size:11px">${d.fmt}</td><td>${fmtN(d.qty)}</td><td>${fmt(d.orders?d.rev/d.orders:0)}</td><td>${fmt(d.rev)}</td><td><div style="display:flex;align-items:center;gap:6px"><div class="progress-wrap" style="width:40px"><div class="progress-bar" style="width:${Math.round(d.rev/maxRev*100)}%"></div></div><span style="font-size:11px;color:#999">${Math.round(d.rev/maxRev*100)}%</span></div></td></tr>`).join('')}</tbody></table></div>
   </div>
+ 
   <div id="sec-stock" class="section">
     <div class="sec-label">Alertas de stock</div>
     <div class="kpis">
@@ -505,6 +697,7 @@ function renderAll(){
     <div class="sec-label">Todos los productos</div>
     <div class="card"><table class="tbl"><thead><tr><th>Producto</th><th>SKU</th><th>Stock</th><th>Estado</th></tr></thead><tbody>${[...ALL_PRODUCTS].sort((a,b)=>{const sa=a.variants?.[0]?.stock??999,sb=b.variants?.[0]?.stock??999;return sa-sb;}).slice(0,40).map(p=>{const s=p.variants?.[0]?.stock;const badge=s===0?'<span class="badge b-cancelled">Sin stock</span>':s<=5?'<span class="badge b-warn">Crítico</span>':s<=10?'<span class="badge b-pending">Bajo</span>':'<span class="badge b-paid">OK</span>';return`<tr><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${getName(p.name)}</td><td style="color:#999;font-size:11px">${p.variants?.[0]?.sku||'—'}</td><td style="font-weight:600">${s!==null&&s!==undefined?fmtN(s):'—'}</td><td>${badge}</td></tr>`;}).join('')}</tbody></table></div>
   </div>
+ 
   <div id="sec-clientes" class="section">
     <div class="sec-label">Métricas generales</div>
     <div class="kpis">
@@ -524,6 +717,7 @@ function renderAll(){
     <div class="sec-label">Top clientes por ingresos</div>
     <div class="card"><table class="tbl"><thead><tr><th>Cliente</th><th>Pedidos</th><th>Total</th><th>Última compra</th></tr></thead><tbody>${topCusts.map(c=>`<tr><td><div style="font-weight:600">${c.name}</div><div style="font-size:11px;color:#999;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.email}</div></td><td>${c.orders.length}</td><td style="font-weight:600">${fmt(c.rev)}</td><td style="color:#999">${new Date(c.last).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td></tr>`).join('')}</tbody></table></div>
   </div>
+ 
   <div id="sec-demografia" class="section">
     ${demoData?`
     <div class="sec-label">Distribución por sexo</div>
@@ -568,6 +762,7 @@ function renderAll(){
       <div class="card"><div class="card-title">Cobertura de datos</div>${[['Con email',demoData.total,demoData.total],['Con teléfono',demoData.withPhone,demoData.total],['Con identificación',demoData.withId,demoData.total],['Con provincia',demoData.topProvs.reduce((s,[,v])=>s+v.count,0),demoData.total],['Con ciudad',demoData.topCities.reduce((s,[,v])=>s+v.count,0),demoData.total]].map(([label,have,tot])=>`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>${label}</span><span style="color:#999">${fmtN(have)} (${(have/tot*100).toFixed(0)}%)</span></div><div class="progress-wrap"><div class="progress-bar" style="width:${Math.round(have/tot*100)}%"></div></div></div>`).join('')}</div>
     </div>`:'<div class="empty">Sin datos suficientes.</div>'}
   </div>
+ 
   <div id="sec-suscripciones" class="section">
     ${subCount===0?'<div class="card"><div class="empty">No se encontraron pedidos de suscripción.</div></div>':`
     <div class="kpis">
@@ -586,6 +781,7 @@ function renderAll(){
     </div>
     <div class="card"><div class="card-title">Suscriptores</div><table class="tbl"><thead><tr><th>Cliente</th><th>Cobros</th><th>Total pagado</th><th>Último cobro</th><th>Estado</th></tr></thead><tbody>${[...subCustList].sort((a,b)=>b.rev-a.rev).slice(0,20).map(c=>{const days=(now-new Date(c.last))/(1000*3600*24),active=days<=45;return`<tr><td><div style="font-weight:600">${c.name}</div><div style="font-size:10px;color:#999;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.email}</div></td><td>${c.orders}</td><td style="font-weight:600">${fmt(c.rev)}</td><td style="color:#999">${new Date(c.last).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td><td>${active?'<span class="badge b-paid">Activo</span>':'<span class="badge b-cancelled">Churned</span>'}</td></tr>`;}).join('')}</tbody></table></div>`}
   </div>
+ 
   <div id="sec-pedidos" class="section">
     <div class="sec-label">Historial de pedidos</div>
     <div class="card"><table class="tbl"><thead><tr><th>#</th><th>Fecha</th><th>Cliente</th><th>Items</th><th>Total</th><th>Estado</th></tr></thead><tbody>${[...orders].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,50).map(o=>`<tr><td style="color:#999;font-size:11px">${o.number}</td><td style="color:#999;font-size:11px;white-space:nowrap">${new Date(o.created_at).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.customer?.name||o.contact_name||'—'}</td><td style="color:#999;font-size:11px">${(o.products||[]).length}</td><td style="font-weight:600">${fmt(parseFloat(o.total||0))}</td><td>${statusBadge(o.payment_status)}</td></tr>`).join('')}</tbody></table>${orders.length>50?`<div style="text-align:center;padding:12px;font-size:12px;color:#999">Mostrando 50 de ${fmtN(orders.length)} pedidos</div>`:''}</div>
@@ -595,6 +791,7 @@ function renderAll(){
       <div class="card"><div class="card-title">Pedidos por provincia</div>${sortedProv.map(([p,c])=>`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>${p}</span><span style="font-weight:600">${fmtN(c)}</span></div><div class="progress-wrap"><div class="progress-bar" style="width:${Math.round(c/maxProv*100)}%"></div></div></div>`).join('')}</div>
     </div>
   </div>
+ 
   <div id="sec-abandonados" class="section">
     <div class="sec-label">Carritos abandonados</div>
     ${ALL_ABANDONED.length===0?'<div class="card"><div class="empty">No se encontraron carritos abandonados.</div></div>':`
@@ -606,8 +803,8 @@ function renderAll(){
     </div>
     <div class="card"><div class="card-title">Carritos abandonados recientes</div><table class="tbl"><thead><tr><th>Fecha</th><th>Cliente</th><th>Email</th><th>Monto</th><th>Productos</th></tr></thead><tbody>${[...ALL_ABANDONED].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,30).map(c=>`<tr><td style="color:#999;font-size:11px;white-space:nowrap">${new Date(c.created_at).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td><td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.contact_name||c.customer?.name||'—'}</td><td style="font-size:11px;color:#999;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.contact_email||c.customer?.email||'—'}</td><td style="font-weight:600">${fmt(parseFloat(c.total||c.subtotal||0))}</td><td style="color:#999;font-size:11px">${(c.products||[]).map(p=>getName(p.name)).slice(0,2).join(', ')}</td></tr>`).join('')}</tbody></table></div>`}
   </div>
-
-  <!-- ── FINANCES SECTIONS ── -->
+ 
+  <!-- ── FINANCES ── -->
   <div id="sec-finanzas" class="section">
     <div class="sec-label">P&amp;L Consolidado</div>
     <div class="month-tabs" id="pl-month-tabs"></div>
@@ -640,7 +837,7 @@ function renderAll(){
     <div class="sec-label">Forecast mensual</div>
     <div id="pl-forecast-container"></div>
   </div>
-
+ 
   <div id="sec-b2b" class="section">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
       <div class="sec-label" style="margin:0">Ventas B2B</div>
@@ -654,7 +851,7 @@ function renderAll(){
       <tbody id="b2b-tbody"></tbody>
     </table></div>
   </div>
-
+ 
   <div id="sec-gastos" class="section">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
       <div class="sec-label" style="margin:0">Gastos operativos</div>
@@ -670,7 +867,7 @@ function renderAll(){
       <tbody id="gastos-tbody"></tbody>
     </table></div>
   </div>
-
+ 
   <div id="sec-marketing-plan" class="section">
     <div class="sec-label">Plan de Marketing — Budget vs Actual</div>
     <div class="month-tabs" id="mktg-month-tabs"></div>
@@ -687,7 +884,7 @@ function renderAll(){
       </div>
     </div>
   </div>
-
+ 
   <div id="sec-costos" class="section">
     <div class="sec-label">Costos de Producto (según Impo)</div>
     <div class="card">
@@ -705,7 +902,7 @@ function renderAll(){
       </table>
     </div>
   </div>
-
+ 
   <div id="sec-pagos-prov" class="section">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
       <div class="sec-label" style="margin:0">Cuentas por pagar</div>
@@ -720,7 +917,7 @@ function renderAll(){
       <tbody id="prov-tbody"></tbody>
     </table></div>
   </div>
-
+ 
   <div id="sec-inventario" class="section">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
       <div class="sec-label" style="margin:0">Inventario & Proyección</div>
@@ -734,7 +931,7 @@ function renderAll(){
     <div class="sec-label">Forecast de compras sugeridas</div>
     <div id="inv-compras"></div>
   </div>
-
+ 
   <div id="sec-cashflow" class="section">
     <div class="sec-label">Cash Flow</div>
     <div class="month-tabs" id="cf-month-tabs"></div>
@@ -756,12 +953,15 @@ function renderAll(){
     </div>
   </div>
   `;
-
+ 
   document.getElementById('sync-time').textContent='Actualizado: '+new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
   if(SELECTED_RECOMPRA_MONTH)renderRecompraDetail(SELECTED_RECOMPRA_MONTH);
-
+ 
   setTimeout(()=>{
-    mkChart('chartMonthly','bar',mLabels,[{data:mVals,backgroundColor:'#1D9E75',borderRadius:4,borderSkipped:false}],{scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},callback:tickY}}}});
+    // ── Resumen charts ──
+    mkChart('chartNuevosClientes','line',mLabels,[{data:newClientsByMonth,borderColor:'#185FA5',backgroundColor:'rgba(24,95,165,0.08)',fill:true,tension:.3,pointRadius:4,pointBackgroundColor:'#185FA5'}],{scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},beginAtZero:true}}},plugins:{legend:{display:false}}});
+    mkChart('chartRevenueMes','line',mLabels,[{data:mVals,borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.08)',fill:true,tension:.3,pointRadius:4,pointBackgroundColor:'#1D9E75'}],{scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},callback:tickY}}},plugins:{legend:{display:false}}});
+    // ── Ventas charts ──
     mkChart('chartDaily','line',dLabels,[{data:dVals,borderColor:'#1D9E75',backgroundColor:'rgba(29,158,117,0.08)',fill:true,tension:.3,pointRadius:2}],{scales:{x:{grid:{display:false},ticks:{font:{size:10},maxTicksLimit:10}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},callback:tickY}}}});
     mkChart('chartTicketEvol','line',mLabels,[{data:mTickets,borderColor:'#185FA5',backgroundColor:'rgba(24,95,165,0.07)',fill:true,tension:.3,pointRadius:3,pointBackgroundColor:'#185FA5'}],{scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},callback:tickY}}},plugins:{tooltip:{callbacks:{label:ctx=>' '+fmt(ctx.parsed.y)}}}});
     mkChart('chartDow','bar',dowLabels,[{data:dowAvg,backgroundColor:'#5DCAA5',borderRadius:4}],{scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:10},callback:tickY}}}});
@@ -784,10 +984,10 @@ function renderAll(){
     }
     setTimeout(()=>buildMap(provMap),200);
   },150);
-
+ 
   renderFinances();
 }
-
+ 
 async function init(){
   try{
     document.getElementById('main').innerHTML='<div class="loading"><div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div><p style="margin-top:1rem">Cargando datos de Bloom Life...</p></div>';
@@ -800,14 +1000,14 @@ async function init(){
     document.getElementById('sync-time').textContent='Error de conexión';
   }
 }
-
+ 
 // ═══════════════════════════════════════════════════════════
 // FINANCES MODULE
 // ═══════════════════════════════════════════════════════════
-
+ 
 function finLoad(key,def){try{return JSON.parse(localStorage.getItem('bl_fin_'+key))??def;}catch(e){return def;}}
 function finSave(key,val){localStorage.setItem('bl_fin_'+key,JSON.stringify(val));}
-
+ 
 const DEFAULT_COSTOS=[
   {sku:'Ashwagandha | Equilibrio Hormonal | Cápsulas',  fob:6.0,  precio:67000},
   {sku:'Ashwagandha | Equilibrio Hormonal | Gummies',   fob:7.89, precio:67000},
@@ -819,14 +1019,14 @@ const DEFAULT_COSTOS=[
   {sku:'Magnesio | Gummies',                            fob:7.07, precio:67000},
   {sku:'Tremella | Piel & Hidratación | Cápsulas',      fob:6.97, precio:67000},
 ];
-
+ 
 const DEFAULT_PROV=[
   {id:'p1',fecha:'2026-03-31',proveedor:'Paz',           concepto:'Honorarios', monto:500000, vence:'2026-05-01',status:'Pendiente',notas:'en calendario figura pendiente'},
   {id:'p2',fecha:'2026-04-08',proveedor:'Mary Fotógrafa',concepto:'Fotografía', monto:310000, vence:'2026-04-24',status:'Pendiente',notas:'fin de mes'},
   {id:'p3',fecha:'2026-04-01',proveedor:'Sergio',        concepto:'Fee',        monto:500000, vence:'2026-04-25',status:'Pendiente',notas:''},
   {id:'p4',fecha:'2026-03-01',proveedor:'Duran',         concepto:'Gestoría',   monto:812000, vence:'',           status:'Pendiente',notas:'esperamos seguimiento'},
 ];
-
+ 
 const MKTG_STRUCTURE=[
   {group:'Influencers',    lines:['Fee Agencia','Fee Influencers','NOP','Expos']},
   {group:'Mktg Digital',   lines:['Automation/Email','Wapp Carritos','Larentools','Perfit','Vibrander','UGC','Pauta','Evolución Web']},
@@ -835,17 +1035,17 @@ const MKTG_STRUCTURE=[
   {group:'Other',          lines:['Fotografía','Videos','Impresiones','Packaging','Otros']},
   {group:'Sin Cargo / USA',lines:['Sin Cargo','USA (neto)']},
 ];
-
+ 
 const MKTG_ALL_CONCEPTS = MKTG_STRUCTURE.flatMap(g=>g.lines);
-
+ 
 const GASTO_CATS=[
   'Producción / COGS','Logística / Distribución','Marketing','Comisiones',
   'Depósito','Contador','Gastos Adm','Gestoría','Impuestos','Fee Bono',
   'Overhead','Movimientos entre cuentas','Other',
 ];
-
+ 
 const MEDIOS_PAGO=['MercadoPago','Galicia','ICBC','Efectivo','Transferencia','Otros'];
-
+ 
 let FIN_B2B    = finLoad('b2b',[]);
 let FIN_GASTOS = finLoad('gastos',[]);
 let FIN_COSTOS = finLoad('costos',DEFAULT_COSTOS);
@@ -858,7 +1058,7 @@ let FIN_FORECAST = finLoad('forecast',{});
 let FIN_INV    = finLoad('inv',{});
 let FIN_PL_MONTH = null;
 let FIN_CF_MONTH = null;
-
+ 
 const nowStr=()=>new Date().toISOString().slice(0,10);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const mLabel=k=>{const[y,m]=k.split('-');return['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][parseInt(m)-1]+"'"+y.slice(2);};
@@ -873,14 +1073,14 @@ const allMonths=()=>{
   if(window._allMonthKeys)window._allMonthKeys.forEach(k=>set.add(k));
   return[...set].sort();
 };
-
+ 
 function b2cRevByMonth(){const map={};(typeof FILTERED_ORDERS!=='undefined'?FILTERED_ORDERS:[]).filter(o=>o.payment_status==='paid').forEach(o=>{const k=o.created_at?.slice(0,7);if(k)map[k]=(map[k]||0)+parseFloat(o.total||0);});return map;}
 function b2bRevByMonth(){const map={};FIN_B2B.filter(b=>b.status==='Cobrado').forEach(b=>{const k=b.fecha?.slice(0,7);if(k)map[k]=(map[k]||0)+parseFloat(b.monto||0);});return map;}
 function cogsByMonth(){const map={};const tc=FIN_TC;const lf=parseFloat(document.getElementById('landed-factor')?.value||FIN_LANDED_FACTOR||2.3);const avgFOB=FIN_COSTOS.reduce((s,c)=>s+c.fob,0)/FIN_COSTOS.length;const avgLanded=avgFOB*tc*lf;(typeof FILTERED_ORDERS!=='undefined'?FILTERED_ORDERS:[]).filter(o=>o.payment_status==='paid').forEach(o=>{const k=o.created_at?.slice(0,7);if(!k)return;const units=(o.products||[]).reduce((s,p)=>s+(p.quantity||1),0);map[k]=(map[k]||0)+units*avgLanded;});FIN_B2B.filter(b=>b.status==='Cobrado').forEach(b=>{const k=b.fecha?.slice(0,7);if(!k)return;map[k]=(map[k]||0)+(parseInt(b.unidades||1))*avgLanded;});return map;}
 function mktgByMonth(){const map={};Object.entries(FIN_MKTG).forEach(([month,lines])=>{let total=0;Object.values(lines).forEach(v=>{total+=parseFloat(v||0);});if(total)map[month]=total;});FIN_GASTOS.filter(g=>g.categoria==='Marketing').forEach(g=>{const k=g.fecha?.slice(0,7);if(k)map[k]=(map[k]||0)+parseFloat(g.monto||0);});return map;}
 function opexByMonth(){const map={};FIN_GASTOS.filter(g=>g.categoria!=='Marketing').forEach(g=>{const k=g.fecha?.slice(0,7);if(k)map[k]=(map[k]||0)+parseFloat(g.monto||0);});return map;}
 function unitsB2CByMonth(){const map={};(typeof FILTERED_ORDERS!=='undefined'?FILTERED_ORDERS:[]).filter(o=>o.payment_status==='paid').forEach(o=>{const k=o.created_at?.slice(0,7);if(!k)return;const units=(o.products||[]).reduce((s,p)=>s+(p.quantity||1),0);map[k]=(map[k]||0)+units;});return map;}
-
+ 
 function renderFinPL(){
   const months=allMonths();
   if(!FIN_PL_MONTH||!months.includes(FIN_PL_MONTH))FIN_PL_MONTH=currentMonth();
@@ -946,7 +1146,7 @@ function renderFinPL(){
     fcEl.innerHTML=`<div class="card"><div class="card-title">Forecast próximos 3 meses <span style="font-size:11px;font-weight:400;color:#999">(editable)</span></div><table class="tbl"><thead><tr><th>Concepto</th>${fMonths.map(k=>`<th>${mLabel(k)}</th>`).join('')}</tr></thead><tbody>${[['Revenue estimado','fc_rev'],['COGS estimado','fc_cogs'],['Marketing','fc_mktg'],['Gastos Op.','fc_opex'],['EBITDA forecast','fc_ebitda']].map(([label,prefix])=>`<tr><td style="font-weight:500">${label}</td>${fMonths.map(k=>{const val=FIN_FORECAST[k]?.[prefix]||'';return`<td><input class="mktg-input" type="number" placeholder="0" value="${val}" onchange="if(!FIN_FORECAST['${k}'])FIN_FORECAST['${k}']={};FIN_FORECAST['${k}']['${prefix}']=parseFloat(this.value)||0"></td>`;}).join('')}</tr>`).join('')}</tbody></table><button class="btn-primary" style="margin-top:12px" onclick="finSave('forecast',FIN_FORECAST);alert('Forecast guardado ✓')">Guardar forecast</button></div>`;
   }
 }
-
+ 
 function renderFinB2B(){
   const total=FIN_B2B.reduce((s,b)=>s+parseFloat(b.monto||0),0);
   const cobrado=FIN_B2B.filter(b=>b.status==='Cobrado').reduce((s,b)=>s+parseFloat(b.monto||0),0);
@@ -980,10 +1180,10 @@ function renderFinB2B(){
       <td><button class="btn-danger" onclick="deleteB2B('${b.id}')">✕</button></td>
     </tr>`).join('');
 }
-
+ 
 window.deleteB2B=function(id){if(!confirm('¿Eliminar?'))return;FIN_B2B=FIN_B2B.filter(b=>b.id!==id);finSave('b2b',FIN_B2B);renderFinB2B();};
-
-// ── MODAL B2B NUEVO ───────────────────────────────────────────────────────────
+ 
+// ── MODAL B2B NUEVO ──────────────────────────────────────
 window.openB2BModal = async function () {
   let tnProducts = [];
   try {
@@ -1002,7 +1202,6 @@ window.openB2BModal = async function () {
   } catch (e) {
     console.error('Error cargando productos:', e);
   }
-
   const modal = document.createElement('div');
   modal.className = 'fin-modal';
   modal.id = 'b2b-modal';
@@ -1010,19 +1209,12 @@ window.openB2BModal = async function () {
     <div class="fin-modal-box" style="max-width:560px">
       <div class="fin-modal-title">Nueva orden B2B</div>
       <div class="fin-row2">
-        <div class="fin-field">
-          <label>Nombre / Empresa</label>
-          <input type="text" id="b2b-cliente" placeholder="Ej: Holofood, María García...">
-        </div>
-        <div class="fin-field">
-          <label>Email (opcional)</label>
-          <input type="email" id="b2b-email" placeholder="contacto@empresa.com">
-        </div>
+        <div class="fin-field"><label>Nombre / Empresa</label><input type="text" id="b2b-cliente" placeholder="Ej: Holofood, María García..."></div>
+        <div class="fin-field"><label>Email (opcional)</label><input type="email" id="b2b-email" placeholder="contacto@empresa.com"></div>
       </div>
       <div class="fin-field">
         <label>Buscar producto</label>
-        <input type="text" id="b2b-search" placeholder="Escribí para buscar..." autocomplete="off"
-          oninput="filterB2BProducts(this.value)" style="margin-bottom:4px">
+        <input type="text" id="b2b-search" placeholder="Escribí para buscar..." autocomplete="off" oninput="filterB2BProducts(this.value)" style="margin-bottom:4px">
         <div id="b2b-product-list" style="border:1px solid #e0e0db;border-radius:8px;max-height:180px;overflow-y:auto;display:none;background:#fff;position:relative;z-index:10"></div>
       </div>
       <div id="b2b-selected-wrap" style="display:none;margin-bottom:12px">
@@ -1030,46 +1222,26 @@ window.openB2BModal = async function () {
         <table class="tbl" id="b2b-selected-table">
           <thead><tr><th>Producto</th><th style="width:70px;text-align:right">Cant.</th><th style="width:120px;text-align:right">Precio unit. ARS</th><th style="width:30px"></th></tr></thead>
           <tbody id="b2b-selected-body"></tbody>
-          <tfoot><tr>
-            <td colspan="2" style="font-weight:700;padding-top:8px">Total</td>
-            <td style="font-weight:700;text-align:right;padding-top:8px" id="b2b-total-display">$0</td>
-            <td></td>
-          </tr></tfoot>
+          <tfoot><tr><td colspan="2" style="font-weight:700;padding-top:8px">Total</td><td style="font-weight:700;text-align:right;padding-top:8px" id="b2b-total-display">$0</td><td></td></tr></tfoot>
         </table>
       </div>
       <div class="fin-field" style="margin-bottom:8px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:#1a1a1a;text-transform:none;letter-spacing:0">
-          <input type="checkbox" id="b2b-factura-a" onchange="toggleFacturaA()"
-            style="width:16px;height:16px;cursor:pointer;accent-color:#1D9E75">
+          <input type="checkbox" id="b2b-factura-a" onchange="toggleFacturaA()" style="width:16px;height:16px;cursor:pointer;accent-color:#1D9E75">
           Factura A
         </label>
       </div>
       <div id="b2b-iva-section" style="display:none;background:#f9f9f7;border-radius:10px;padding:12px;margin-bottom:12px">
         <div style="font-size:11px;color:#999;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Desglose IVA (21%)</div>
-        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
-          <span>Subtotal sin IVA</span><span id="b2b-sin-iva" style="font-weight:600">$0</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
-          <span>IVA 21%</span><span id="b2b-iva-monto" style="font-weight:600;color:#EF9F27">$0</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;border-top:1px solid #e0e0db;padding-top:8px;margin-top:4px">
-          <span>Total con IVA</span><span id="b2b-con-iva" style="color:#1D9E75">$0</span>
-        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Subtotal sin IVA</span><span id="b2b-sin-iva" style="font-weight:600">$0</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>IVA 21%</span><span id="b2b-iva-monto" style="font-weight:600;color:#EF9F27">$0</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;border-top:1px solid #e0e0db;padding-top:8px;margin-top:4px"><span>Total con IVA</span><span id="b2b-con-iva" style="color:#1D9E75">$0</span></div>
       </div>
       <div class="fin-row2">
-        <div class="fin-field">
-          <label>Estado</label>
-          <select id="b2b-status"><option>Pendiente</option><option>Cobrado</option></select>
-        </div>
-        <div class="fin-field">
-          <label>Canal de venta</label>
-          <input type="text" id="b2b-canal" placeholder="Ej: WhatsApp, Email, Expo...">
-        </div>
+        <div class="fin-field"><label>Estado</label><select id="b2b-status"><option>Pendiente</option><option>Cobrado</option></select></div>
+        <div class="fin-field"><label>Canal de venta</label><input type="text" id="b2b-canal" placeholder="Ej: WhatsApp, Email, Expo..."></div>
       </div>
-      <div class="fin-field">
-        <label>Notas</label>
-        <textarea id="b2b-notas" placeholder="Condiciones de pago, observaciones..." style="min-height:50px"></textarea>
-      </div>
+      <div class="fin-field"><label>Notas</label><textarea id="b2b-notas" placeholder="Condiciones de pago, observaciones..." style="min-height:50px"></textarea></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:1rem">
         <button class="btn-secondary" onclick="document.getElementById('b2b-modal').remove()">Cancelar</button>
         <button class="btn-primary" id="b2b-submit-btn" onclick="saveB2B()">Crear orden en Tienda Nube</button>
@@ -1079,7 +1251,7 @@ window.openB2BModal = async function () {
   window._b2bProducts = tnProducts;
   window._b2bSelected = [];
 };
-
+ 
 window.filterB2BProducts = function (query) {
   const list = document.getElementById('b2b-product-list');
   if (!list) return;
@@ -1089,34 +1261,28 @@ window.filterB2BProducts = function (query) {
   if (!matches.length) { list.style.display = 'none'; return; }
   list.style.display = 'block';
   list.innerHTML = matches.map(p => `
-    <div onclick="addB2BProduct(${p.id})"
-      style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0ec;display:flex;justify-content:space-between;align-items:center"
-      onmouseover="this.style.background='#f5f5f3'" onmouseout="this.style.background='#fff'">
+    <div onclick="addB2BProduct(${p.id})" style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0ec;display:flex;justify-content:space-between;align-items:center" onmouseover="this.style.background='#f5f5f3'" onmouseout="this.style.background='#fff'">
       <span>${p.nombre}</span>
       <span style="font-size:11px;color:#999;margin-left:8px;white-space:nowrap">${p.stock!==null&&p.stock!==undefined?'Stock: '+p.stock:'sin control'}</span>
     </div>`).join('');
 };
-
+ 
 window.addB2BProduct = function (productId) {
   const p = (window._b2bProducts || []).find(x => x.id === productId);
   if (!p) return;
-  if ((window._b2bSelected || []).find(x => x.id === productId)) {
-    document.getElementById('b2b-product-list').style.display = 'none';
-    document.getElementById('b2b-search').value = '';
-    return;
-  }
+  if ((window._b2bSelected || []).find(x => x.id === productId)) { document.getElementById('b2b-product-list').style.display='none';document.getElementById('b2b-search').value='';return; }
   window._b2bSelected = window._b2bSelected || [];
   window._b2bSelected.push({ ...p, cantidad: 1, precio: p.precio });
   document.getElementById('b2b-product-list').style.display = 'none';
   document.getElementById('b2b-search').value = '';
   renderB2BSelected();
 };
-
+ 
 window.removeB2BProduct = function (productId) {
   window._b2bSelected = (window._b2bSelected || []).filter(x => x.id !== productId);
   renderB2BSelected();
 };
-
+ 
 window.renderB2BSelected = function () {
   const tbody = document.getElementById('b2b-selected-body');
   const wrap = document.getElementById('b2b-selected-wrap');
@@ -1126,27 +1292,19 @@ window.renderB2BSelected = function () {
   tbody.innerHTML = selected.map(p => `
     <tr>
       <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre}</td>
-      <td style="text-align:right">
-        <input type="number" min="1" value="${p.cantidad}"
-          style="width:55px;padding:4px 6px;border:1px solid #e0e0db;border-radius:6px;font-size:12px;text-align:right"
-          onchange="updateB2BProduct(${p.id},'cantidad',parseInt(this.value)||1)">
-      </td>
-      <td style="text-align:right">
-        <input type="number" min="0" step="100" value="${p.precio}"
-          style="width:105px;padding:4px 6px;border:1px solid #e0e0db;border-radius:6px;font-size:12px;text-align:right"
-          onchange="updateB2BProduct(${p.id},'precio',parseFloat(this.value)||0)">
-      </td>
+      <td style="text-align:right"><input type="number" min="1" value="${p.cantidad}" style="width:55px;padding:4px 6px;border:1px solid #e0e0db;border-radius:6px;font-size:12px;text-align:right" onchange="updateB2BProduct(${p.id},'cantidad',parseInt(this.value)||1)"></td>
+      <td style="text-align:right"><input type="number" min="0" step="100" value="${p.precio}" style="width:105px;padding:4px 6px;border:1px solid #e0e0db;border-radius:6px;font-size:12px;text-align:right" onchange="updateB2BProduct(${p.id},'precio',parseFloat(this.value)||0)"></td>
       <td><button class="btn-danger" onclick="removeB2BProduct(${p.id})">✕</button></td>
     </tr>`).join('');
   updateB2BTotals();
 };
-
+ 
 window.updateB2BProduct = function (productId, field, value) {
   const item = (window._b2bSelected || []).find(x => x.id === productId);
   if (item) item[field] = value;
   updateB2BTotals();
 };
-
+ 
 window.updateB2BTotals = function () {
   const selected = window._b2bSelected || [];
   const total = selected.reduce((s, p) => s + p.precio * p.cantidad, 0);
@@ -1154,17 +1312,12 @@ window.updateB2BTotals = function () {
   if (totalDisplay) totalDisplay.textContent = fmt(total);
   const facturaA = document.getElementById('b2b-factura-a');
   if (facturaA?.checked) {
-    const sinIva = total / 1.21;
-    const iva = total - sinIva;
-    const sinIvaEl = document.getElementById('b2b-sin-iva');
-    const ivaEl = document.getElementById('b2b-iva-monto');
-    const conIvaEl = document.getElementById('b2b-con-iva');
-    if (sinIvaEl) sinIvaEl.textContent = fmt(sinIva);
-    if (ivaEl) ivaEl.textContent = fmt(iva);
-    if (conIvaEl) conIvaEl.textContent = fmt(total);
+    const sinIva = total / 1.21, iva = total - sinIva;
+    const s=document.getElementById('b2b-sin-iva'),i=document.getElementById('b2b-iva-monto'),c=document.getElementById('b2b-con-iva');
+    if(s)s.textContent=fmt(sinIva);if(i)i.textContent=fmt(iva);if(c)c.textContent=fmt(total);
   }
 };
-
+ 
 window.toggleFacturaA = function () {
   const checked = document.getElementById('b2b-factura-a')?.checked;
   const section = document.getElementById('b2b-iva-section');
@@ -1172,7 +1325,7 @@ window.toggleFacturaA = function () {
   section.style.display = checked ? 'block' : 'none';
   if (checked) updateB2BTotals();
 };
-
+ 
 window.saveB2B = async function () {
   const selected = window._b2bSelected || [];
   if (!selected.length) { alert('Agregá al menos un producto'); return; }
@@ -1191,39 +1344,13 @@ window.saveB2B = async function () {
   try {
     const payload = {
       cliente: { nombre: clienteNombre, email: clienteEmail },
-      productos: selected.map(p => ({
-        variantId: p.variantId,
-        productId: p.id,
-        nombre: p.nombre,
-        cantidad: p.cantidad,
-        precio: p.precio,
-      })),
+      productos: selected.map(p => ({variantId: p.variantId, productId: p.id, nombre: p.nombre, cantidad: p.cantidad, precio: p.precio})),
       notas: [notas, facturaA ? 'FACTURA A' : '', canal ? 'Canal: ' + canal : ''].filter(Boolean).join(' | '),
     };
-    const r = await fetch('/api/crear-orden-b2b', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const r = await fetch('/api/crear-orden-b2b', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const result = await r.json();
-    if (!result.ok) {
-      console.error('Error TN:', result.error);
-      alert('Error al crear la orden en Tienda Nube. El registro financiero se guardará igual.');
-    }
-    const entry = {
-      id: uid(),
-      fecha: nowStr(),
-      cliente: clienteNombre,
-      email: clienteEmail,
-      productos: nombresProductos,
-      unidades: totalUnidades,
-      monto: totalARS,
-      status,
-      facturaA,
-      canal,
-      notas,
-      ordenTN: result.orden?.number || null,
-    };
+    if (!result.ok) { console.error('Error TN:', result.error); alert('Error al crear la orden en Tienda Nube. El registro financiero se guardará igual.'); }
+    const entry = {id:uid(),fecha:nowStr(),cliente:clienteNombre,email:clienteEmail,productos:nombresProductos,unidades:totalUnidades,monto:totalARS,status,facturaA,canal,notas,ordenTN:result.orden?.number||null};
     FIN_B2B.push(entry);
     finSave('b2b', FIN_B2B);
     document.getElementById('b2b-modal').remove();
@@ -1235,8 +1362,7 @@ window.saveB2B = async function () {
     alert('Error de conexión: ' + e.message);
   }
 };
-// ─────────────────────────────────────────────────────────────────────────────
-
+ 
 function renderFinGastos(){
   const now=currentMonth();
   const thisMonth=FIN_GASTOS.filter(g=>g.fecha?.slice(0,7)===now);
@@ -1263,9 +1389,9 @@ function renderFinGastos(){
       <td><button class="btn-danger" onclick="deleteGasto('${g.id}')">✕</button></td>
     </tr>`).join('');
 }
-
+ 
 window.deleteGasto=function(id){if(!confirm('¿Eliminar?'))return;FIN_GASTOS=FIN_GASTOS.filter(g=>g.id!==id);finSave('gastos',FIN_GASTOS);renderFinGastos();};
-
+ 
 window.openGastoModal=function(){
   const modal=document.createElement('div');modal.className='fin-modal';modal.id='gasto-modal';
   modal.innerHTML=`<div class="fin-modal-box">
@@ -1287,14 +1413,14 @@ window.openGastoModal=function(){
   </div>`;
   document.body.appendChild(modal);
 };
-
+ 
 window.saveGasto=function(){
   const e={id:uid(),fecha:document.getElementById('g-fecha').value,concepto:document.getElementById('g-concepto').value.trim(),categoria:document.getElementById('g-cat').value,proveedor:document.getElementById('g-proveedor').value.trim(),medioPago:document.getElementById('g-medioPago').value,monto:parseFloat(document.getElementById('g-monto').value)||0};
   if(!e.concepto||!e.monto){alert('Concepto y monto son requeridos');return;}
   FIN_GASTOS.push(e);finSave('gastos',FIN_GASTOS);document.getElementById('gasto-modal').remove();renderFinGastos();
   if(e.categoria==='Marketing'&&FIN_PL_MONTH){renderFinPL();}
 };
-
+ 
 function renderFinMktg(){
   const months=allMonths().slice(-8);
   const tabsEl=document.getElementById('mktg-month-tabs');
@@ -1342,10 +1468,10 @@ function renderFinMktg(){
   const tbl=document.getElementById('mktg-plan-table');
   if(tbl)tbl.innerHTML=html;
 }
-
+ 
 window.saveMktgPlan=function(){finSave('mktg',FIN_MKTG);if(document.getElementById('sec-finanzas')?.classList.contains('active'))renderFinPL();alert('Plan de marketing guardado ✓');};
 window.addMktgMonth=function(){const m=prompt('Ingresá el mes en formato YYYY-MM (ej: 2026-05):');if(!m||!/^\d{4}-\d{2}$/.test(m))return;if(!FIN_MKTG[m])FIN_MKTG[m]={};const tabsEl=document.getElementById('mktg-month-tabs');if(tabsEl)tabsEl.dataset.active=m;renderFinMktg();};
-
+ 
 function renderFinCostos(){
   const tc=FIN_TC;
   const lf=parseFloat(document.getElementById('landed-factor')?.value||FIN_LANDED_FACTOR||2.3);
@@ -1365,10 +1491,10 @@ function renderFinCostos(){
     </tr>`;
   }).join('');
 }
-
+ 
 window.recalcCostos=function(){FIN_TC=parseInt(document.getElementById('tc-slider')?.value||FIN_TC);FIN_LANDED_FACTOR=parseFloat(document.getElementById('landed-factor')?.value||FIN_LANDED_FACTOR||2.3);renderFinCostos();};
 window.saveCostos=function(){FIN_TC=parseInt(document.getElementById('tc-slider')?.value||FIN_TC);FIN_LANDED_FACTOR=parseFloat(document.getElementById('landed-factor')?.value||FIN_LANDED_FACTOR||2.3);finSave('costos',FIN_COSTOS);finSave('tc',FIN_TC);finSave('landedfactor',FIN_LANDED_FACTOR);if(document.getElementById('sec-finanzas')?.classList.contains('active'))renderFinPL();alert('Costos guardados ✓');};
-
+ 
 function renderFinProv(){
   const pending=FIN_PROV.filter(p=>p.status==='Pendiente');
   const totalPen=pending.reduce((s,p)=>s+parseFloat(p.monto||0),0);
@@ -1404,10 +1530,10 @@ function renderFinProv(){
       <td><button class="btn-danger" onclick="deleteProv('${p.id}')">✕</button></td>
     </tr>`).join('');
 }
-
+ 
 window.markProvPaid=function(id){const p=FIN_PROV.find(x=>x.id===id);if(p){p.status='Pagado';finSave('prov',FIN_PROV);renderFinProv();}};
 window.deleteProv=function(id){if(!confirm('¿Eliminar esta factura?'))return;FIN_PROV=FIN_PROV.filter(p=>p.id!==id);finSave('prov',FIN_PROV);renderFinProv();};
-
+ 
 window.openProvModal=function(){
   const modal=document.createElement('div');modal.className='fin-modal';modal.id='prov-modal';
   modal.innerHTML=`<div class="fin-modal-box">
@@ -1433,17 +1559,17 @@ window.openProvModal=function(){
   </div>`;
   document.body.appendChild(modal);
 };
-
+ 
 window.saveProv=function(){
   const e={id:uid(),fecha:document.getElementById('pv-fecha').value,proveedor:document.getElementById('pv-prov').value.trim(),factura:document.getElementById('pv-fc').value.trim(),concepto:document.getElementById('pv-concepto').value.trim(),monto:parseFloat(document.getElementById('pv-monto').value)||0,vence:document.getElementById('pv-vence').value,status:document.getElementById('pv-status').value,notas:document.getElementById('pv-notas').value.trim()};
   if(!e.proveedor||!e.monto){alert('Proveedor y monto son requeridos');return;}
   FIN_PROV.push(e);finSave('prov',FIN_PROV);document.getElementById('prov-modal').remove();renderFinProv();
 };
-
+ 
 // ═══════════════════════════════════════════════════════════
 // INVENTARIO MODULE
 // ═══════════════════════════════════════════════════════════
-
+ 
 function renderInventario(){
   const kpisEl=document.getElementById('inv-kpis');
   const semaforoEl=document.getElementById('inv-semaforo');
@@ -1512,13 +1638,13 @@ function renderInventario(){
     else{comprasEl.innerHTML=`<div class="card"><div class="card-title">SKUs para ordenar (cobertura &lt;60 días)</div><table class="tbl"><thead><tr><th>SKU</th><th>Stock actual</th><th>Días restantes</th><th>Sugerido comprar (90d)</th></tr></thead><tbody>${comprasSugeridas.sort((a,b)=>a.daysLeft-b.daysLeft).map(c=>`<tr><td style="font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</td><td>${fmtN(c.stock)}</td><td style="font-weight:600;color:${c.daysLeft<=30?'#D85A30':'#EF9F27'}">${c.daysLeft}d</td><td style="font-weight:700;color:#185FA5">${fmtN(c.suggestedQty)} uds</td></tr>`).join('')}</tbody></table></div>`;}
   }
 }
-
+ 
 window.toggleInvPedido=function(pid,checked){if(!FIN_INV[pid])FIN_INV[pid]={};FIN_INV[pid].pedidoRealizado=checked;finSave('inv',FIN_INV);};
-
+ 
 // ═══════════════════════════════════════════════════════════
 // CASH FLOW MODULE
 // ═══════════════════════════════════════════════════════════
-
+ 
 function renderCashFlow(){
   const months=allMonths();
   if(!FIN_CF_MONTH||!months.includes(FIN_CF_MONTH))FIN_CF_MONTH=currentMonth();
@@ -1529,16 +1655,12 @@ function renderCashFlow(){
   const m=FIN_CF_MONTH;
   const cfData=FIN_CF[m]||{};
   const revTotal=(b2c[m]||0)+(b2b[m]||0);
-  const cogsVal=cogs[m]||0;
-  const mktgVal=mktg[m]||0;
-  const opexVal=opex[m]||0;
+  const cogsVal=cogs[m]||0,mktgVal=mktg[m]||0,opexVal=opex[m]||0;
   const ebitda=revTotal-cogsVal-mktgVal-opexVal;
   const cfExtras=cfData.extras||[];
   const cfIn=cfExtras.filter(e=>e.tipo==='ingreso').reduce((s,e)=>s+parseFloat(e.monto||0),0);
   const cfOut=cfExtras.filter(e=>e.tipo==='egreso').reduce((s,e)=>s+parseFloat(e.monto||0),0);
-  const impo=parseFloat(cfData.impo||0);
-  const produccion=parseFloat(cfData.produccion||0);
-  const deuda=parseFloat(cfData.deuda||0);
+  const impo=parseFloat(cfData.impo||0),produccion=parseFloat(cfData.produccion||0),deuda=parseFloat(cfData.deuda||0);
   const cfNeto=ebitda+cfIn-cfOut-impo-produccion-deuda;
   const cfKpis=document.getElementById('cf-kpis');
   if(cfKpis)cfKpis.innerHTML=`
@@ -1573,10 +1695,10 @@ function renderCashFlow(){
     detailEl.innerHTML=allExtras.length===0?'<div class="card"><div class="empty">Sin movimientos manuales para este mes.</div></div>':`<div class="card"><table class="tbl"><thead><tr><th>Tipo</th><th>Descripción</th><th>Monto</th><th></th></tr></thead><tbody>${allExtras.map(e=>`<tr><td>${e.tipo==='ingreso'?'<span class="badge b-paid">Ingreso</span>':'<span class="badge b-cancelled">Egreso</span>'}</td><td>${e.descripcion}</td><td style="font-weight:600;color:${e.tipo==='ingreso'?'#1D9E75':'#D85A30'}">${fmt(parseFloat(e.monto||0))}</td><td><button class="btn-danger" onclick="deleteCFExtra('${m}',${e.idx})">✕</button></td></tr>`).join('')}</tbody></table></div>`;
   }
 }
-
+ 
 window.deleteCFExtra=function(month,idx){if(!FIN_CF[month]?.extras)return;FIN_CF[month].extras.splice(idx,1);finSave('cf',FIN_CF);renderCashFlow();};
 window.saveCF=function(){finSave('cf',FIN_CF);alert('Cash Flow guardado ✓');};
-
+ 
 window.openCFModal=function(){
   const modal=document.createElement('div');modal.className='fin-modal';modal.id='cf-modal';
   const m=FIN_CF_MONTH||currentMonth();
@@ -1594,7 +1716,7 @@ window.openCFModal=function(){
   </div>`;
   document.body.appendChild(modal);
 };
-
+ 
 window.saveCFExtra=function(m){
   const tipo=document.getElementById('cf-tipo').value;
   const monto=parseFloat(document.getElementById('cf-monto').value)||0;
@@ -1607,7 +1729,7 @@ window.saveCFExtra=function(m){
   document.getElementById('cf-modal').remove();
   renderCashFlow();
 };
-
+ 
 function renderFinances(){
   renderFinPL();
   renderFinB2B();
