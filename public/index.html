@@ -519,16 +519,16 @@ function renderAll(){
   const rev12m=paid12m.reduce((s,o)=>s+parseFloat(o.total||0),0);
  
   // MoM últimos 3 meses
-  const m2=new Date(now.getFullYear(),now.getMonth()-2,1);
-  const m3start=new Date(now.getFullYear(),now.getMonth()-3,1);
-  const revM2=paid.filter(o=>{const d=new Date(o.created_at);return d>=m2&&d<m1;}).reduce((s,o)=>s+parseFloat(o.total||0),0);
-  const revM3=paid.filter(o=>{const d=new Date(o.created_at);return d>=m3start&&d<m2;}).reduce((s,o)=>s+parseFloat(o.total||0),0);
+  const mMinus2=new Date(now.getFullYear(),now.getMonth()-2,1);
+  const mMinus3=new Date(now.getFullYear(),now.getMonth()-3,1);
+  const revM2=paid.filter(o=>{const d=new Date(o.created_at);return d>=mMinus2&&d<m1;}).reduce((s,o)=>s+parseFloat(o.total||0),0);
+  const revM3=paid.filter(o=>{const d=new Date(o.created_at);return d>=mMinus3&&d<mMinus2;}).reduce((s,o)=>s+parseFloat(o.total||0),0);
   const momM1=revM2>0?((revL-revM2)/revM2*100).toFixed(1):null;
   const momM2=revM3>0?((revM2-revM3)/revM3*100).toFixed(1):null;
   const momCurr=revL>0?((revM-revL)/revL*100).toFixed(1):null;
   const mNames3=[
-    mNames[m3start.getMonth()]+"'"+String(m3start.getFullYear()).slice(2),
-    mNames[m2.getMonth()]+"'"+String(m2.getFullYear()).slice(2),
+    mNames[mMinus3.getMonth()]+"'"+String(mMinus3.getFullYear()).slice(2),
+    mNames[mMinus2.getMonth()]+"'"+String(mMinus2.getFullYear()).slice(2),
     mNames[m1.getMonth()]+"'"+String(m1.getFullYear()).slice(2),
   ];
  
@@ -1495,7 +1495,7 @@ function renderFinPL(){
       {label:'Gross Margin',value:parseFloat(grossPct),good:60,warn:40,unit:'%',desc:'≥60% saludable'},
       {label:'EBITDA',value:parseFloat(ebitdaPct),good:10,warn:0,unit:'%',desc:'≥10% muy bien · ≥0% ok'},
       {label:'Mktg / Revenue',value:parseFloat(mktgPct),good:null,warn:30,unit:'%',desc:'<30% saludable',invert:true},
-      {label:'Revenue vs mes anterior',value:revL>0?parseFloat(((revTotal-revL)/revL*100).toFixed(1)):null,good:5,warn:0,unit:'%',desc:'crecimiento mensual'},
+      {label:'Revenue vs mes anterior',value:(()=>{const prevM=new Date();prevM.setMonth(prevM.getMonth()-1);const pm0=new Date(prevM.getFullYear(),prevM.getMonth(),1),pm1=new Date(prevM.getFullYear(),prevM.getMonth()+1,1);const prevRev=b2c[m.slice(0,7)]||(b2c[Object.keys(b2c).sort().slice(-2,-1)[0]]||0);const pKey=new Date(new Date().getFullYear(),new Date().getMonth()-1,1).toISOString().slice(0,7);const prevRevB2C=b2c[pKey]||0;const prevRevB2B=b2b[pKey]||0;const prevTotal=prevRevB2C+prevRevB2B;return prevTotal>0?parseFloat(((revTotal-prevTotal)/prevTotal*100).toFixed(1)):null;})(),good:5,warn:0,unit:'%',desc:'crecimiento mensual'},
     ];
     healthEl.innerHTML=checks.map(ch=>{
       const v=ch.value;
