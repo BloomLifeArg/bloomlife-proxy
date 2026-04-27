@@ -461,11 +461,9 @@ function renderAll(){
   const clients12m=new Set(paid12m.map(o=>o.customer?.email).filter(Boolean)).size;
   const ordersPerClient=clients12m?paid12m.length/clients12m:0;
  
-  // LTV = ARPU × gross margin estimado (o ARPU si no hay costos configurados)
-  const avgFOB=FIN_COSTOS.length?FIN_COSTOS.reduce((s,c)=>s+c.fob,0)/FIN_COSTOS.length:0;
-  const avgLandedUnit=avgFOB*FIN_TC*(parseFloat(FIN_LANDED_FACTOR)||2.3);
-  const grossMarginPct=avgTicket>0&&avgLandedUnit>0?Math.max(0,(avgTicket-avgLandedUnit)/avgTicket):null;
-  const ltvCalc=grossMarginPct!==null?arpu*grossMarginPct:arpu;
+  // LTV = ARPU × 65% (contribución marginal fija)
+  const grossMarginPct=0.65;
+  const ltvCalc=arpu*grossMarginPct;
  
   // CAC = marketing spend 6m / nuevos clientes 6m
   const mktgMap=mktgByMonth();
@@ -533,6 +531,11 @@ function renderAll(){
         <div class="kpi-sub">este mes</div>
       </div>
       <div class="kpi">
+        <div class="kpi-label">Nuevos clientes 6m</div>
+        <div class="kpi-value">${fmtN(newClients6m)}</div>
+        <div class="kpi-sub">últimos 6 meses</div>
+      </div>
+      <div class="kpi">
         <div class="kpi-label">% Recurrentes</div>
         <div class="kpi-value ${parseFloat(retRate)>=30?'up':parseFloat(retRate)>=15?'':'down'}">${retRate}%</div>
         <div class="kpi-sub">${fmtN(returning)} de ${fmtN(customers.length)} clientes</div>
@@ -565,7 +568,7 @@ function renderAll(){
       <div class="signal-card neutral">
         <div class="signal-label">LTV</div>
         <div class="signal-value">${ltvCalc>0?fmt(ltvCalc):'—'}</div>
-        <div class="signal-sub">${grossMarginPct!==null?'ARPU × margen '+(grossMarginPct*100).toFixed(0)+'%':'ARPU directo (sin margen)'}</div>
+        <div class="signal-sub">ARPU × 65% contribución marginal</div>
         <span class="signal-rule neutral">Valor de vida del cliente</span>
       </div>
  
