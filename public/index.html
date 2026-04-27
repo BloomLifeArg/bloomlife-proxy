@@ -145,6 +145,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .signal-rule.bad{background:#FCEBEB;color:#A32D2D}
 .signal-rule.neutral{background:#f0f0ec;color:#666}
 @media(max-width:540px){.grid2{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}.nav-group-label{display:none}.mktg-line{grid-template-columns:1fr 1fr 1fr;}.mktg-line span:first-child{grid-column:1/-1;font-weight:600}}
+/* ── COHORT TABLE ── */
+.cohort-table{width:100%;border-collapse:collapse;font-size:12px}
+.cohort-table th{background:#f9f9f7;color:#999;font-weight:600;text-align:center;padding:8px 10px;border:1px solid #f0f0ec;white-space:nowrap}
+.cohort-table td{text-align:center;padding:7px 10px;border:1px solid #f0f0ec;font-weight:600}
+.cohort-table td.cohort-label{text-align:left;font-weight:600;color:#1a1a1a;background:#f9f9f7;white-space:nowrap}
+.cohort-high{background:#1D9E75;color:#fff}
+.cohort-mid{background:#5DCAA5;color:#fff}
+.cohort-low{background:#B5E8D8;color:#0F6E56}
+.cohort-zero{background:#f9f9f7;color:#ccc}
+/* ── FREQUENCY ── */
+.freq-bar-wrap{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.freq-label{font-size:12px;color:#1a1a1a;min-width:80px;font-weight:500}
+.freq-bar{flex:1;background:#f0f0ec;border-radius:4px;height:22px;overflow:hidden}
+.freq-bar-fill{height:100%;border-radius:4px;background:#1D9E75;display:flex;align-items:center;padding-left:8px;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;min-width:40px}
+.freq-count{font-size:11px;color:#999;min-width:60px;text-align:right}
+/* ── HEALTH ── */
+.health-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0ec;font-size:13px}
+.health-row:last-child{border-bottom:none}
+.health-indicator{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-right:10px}
+.health-green{background:#1D9E75}.health-yellow{background:#EF9F27}.health-red{background:#D85A30}
+/* ── GENDER x PRODUCT ── */
+.gxp-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px}
+.gxp-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.gxp-bar-wrap{width:160px;background:#f0f0ec;border-radius:4px;height:16px;display:flex;overflow:hidden}
+.gxp-f{background:#993556;height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff}
+.gxp-m{background:#185FA5;height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff}
+/* ── EXPORT ── */
+.btn-export{padding:5px 12px;background:#f0f0ec;color:#666;border:1px solid #e0e0db;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:600}
+.btn-export:hover{background:#1D9E75;color:#fff;border-color:#1D9E75}
 </style>
 </head>
 <body>
@@ -509,6 +538,132 @@ function renderAll(){
     return Object.values(firstPurchaseByEmail).filter(d=>new Date(d)>=mStart&&new Date(d)<mEnd).length;
   });
  
+  // ── COHORT DE RETENCIÓN ────────────────────────────────────
+  // Para cada mes cohorte, calcula qué % recompró en mes+1, +2, +3
+  const cohortMonths=allMonthKeys.slice(-7); // últimos 7 meses para tener 3 períodos de seguimiento
+  const cohortData=cohortMonths.slice(0,-3).map(cohortKey=>{
+    const[cy,cm]=cohortKey.split('-');
+    const cohortStart=new Date(parseInt(cy),parseInt(cm)-1,1);
+    const cohortEnd=new Date(parseInt(cy),parseInt(cm),1);
+    // clientes nuevos en ese mes (primera compra)
+    const cohortEmails=new Set(
+      paid.filter(o=>{
+        const e=o.customer?.email;
+        if(!e)return false;
+        const d=new Date(o.created_at);
+        if(d<cohortStart||d>=cohortEnd)return false;
+        // verificar que sea primera compra
+        return!paid.some(o2=>o2.customer?.email===e&&new Date(o2.created_at)<d);
+      }).map(o=>o.customer?.email)
+    );
+    const cohortSize=cohortEmails.size;
+    // retención mes+1, +2, +3
+    const retention=[1,2,3].map(offset=>{
+      const mStart=new Date(parseInt(cy),parseInt(cm)-1+offset,1);
+      const mEnd=new Date(parseInt(cy),parseInt(cm)+offset,1);
+      const returned=new Set(
+        paid.filter(o=>{
+          const d=new Date(o.created_at);
+          return cohortEmails.has(o.customer?.email)&&d>=mStart&&d<mEnd;
+        }).map(o=>o.customer?.email)
+      ).size;
+      return cohortSize>0?Math.round(returned/cohortSize*100):0;
+    });
+    const mLabel2=mNames[parseInt(cm)-1]+"'"+cy.slice(2);
+    return{key:cohortKey,label:mLabel2,size:cohortSize,retention};
+  });
+ 
+  // ── FRECUENCIA DE COMPRA ───────────────────────────────────
+  const freqBuckets={'1 compra':0,'2 compras':0,'3 compras':0,'4-5 compras':0,'6-10 compras':0,'10+ compras':0};
+  custList.forEach(c=>{
+    const n=c.orders.length;
+    if(n===1)freqBuckets['1 compra']++;
+    else if(n===2)freqBuckets['2 compras']++;
+    else if(n===3)freqBuckets['3 compras']++;
+    else if(n<=5)freqBuckets['4-5 compras']++;
+    else if(n<=10)freqBuckets['6-10 compras']++;
+    else freqBuckets['10+ compras']++;
+  });
+  const freqMax=Math.max(...Object.values(freqBuckets),1);
+ 
+  // ── LTV SUSCRIPTORES vs NO SUSCRIPTORES ───────────────────
+  const subEmailSet=new Set(subPaid.map(o=>o.customer?.email).filter(Boolean));
+  const subCusts=custList.filter(c=>subEmailSet.has(c.email));
+  const noSubCusts=custList.filter(c=>!subEmailSet.has(c.email));
+  const avgLTVSub=subCusts.length?subCusts.reduce((s,c)=>s+c.rev,0)/subCusts.length:0;
+  const avgLTVNoSub=noSubCusts.length?noSubCusts.reduce((s,c)=>s+c.rev,0)/noSubCusts.length:0;
+  const ltvMultiplier=avgLTVNoSub>0?(avgLTVSub/avgLTVNoSub).toFixed(1):0;
+  // delta nuevos suscriptores vs mes anterior
+  const subNewThisMonth=(subMonthlyMap[Object.keys(subMonthlyMap).sort().slice(-1)[0]]?.new||0);
+  const subNewLastMonth=(subMonthlyMap[Object.keys(subMonthlyMap).sort().slice(-2,-1)[0]]?.new||0);
+  const subNewDelta=subNewThisMonth-subNewLastMonth;
+ 
+  // ── GÉNERO × PRODUCTO ─────────────────────────────────────
+  const gxpMap={};
+  paid.forEach(o=>{
+    const email=o.customer?.email||o.contact_email;if(!email)return;
+    const name=o.customer?.name||o.contact_name||'';
+    const gender=inferGender(name);
+    if(gender==='unknown')return;
+    (o.products||[]).forEach(it=>{
+      const n=getName(it.name);
+      if(n.toLowerCase().includes('envío'))return;
+      if(!gxpMap[n])gxpMap[n]={F:0,M:0,revF:0,revM:0};
+      gxpMap[n][gender]+=(it.quantity||1);
+      if(gender==='F')gxpMap[n].revF+=parseFloat(it.price||0)*(it.quantity||1);
+      else gxpMap[n].revM+=parseFloat(it.price||0)*(it.quantity||1);
+    });
+  });
+  const gxpSorted=Object.entries(gxpMap)
+    .filter(([,d])=>d.F+d.M>=5)
+    .sort((a,b)=>(b[1].F+b[1].M)-(a[1].F+a[1].M))
+    .slice(0,12)
+    .map(([name,d])=>{
+      const total=d.F+d.M;
+      return{name,total,pctF:Math.round(d.F/total*100),pctM:Math.round(d.M/total*100),revF:d.revF,revM:d.revM};
+    });
+ 
+  // ── EVOLUCIÓN DE CANALES (últimos 6 meses) ─────────────────
+  const channelEvol={};
+  orders.forEach(o=>{
+    const utm=o.customer_visit?.utm_parameters;
+    const source=utm?.utm_source||'directo';
+    const k=new Date(o.created_at).toISOString().slice(0,7);
+    if(!channelEvol[source])channelEvol[source]={};
+    if(!channelEvol[source][k])channelEvol[source][k]={orders:0,rev:0};
+    channelEvol[source][k].orders++;
+    if(o.payment_status==='paid')channelEvol[source][k].rev+=parseFloat(o.total||0);
+  });
+  const topChannels=Object.entries(channelEvol)
+    .map(([src,months])=>({src,total:Object.values(months).reduce((s,m)=>s+m.rev,0)}))
+    .sort((a,b)=>b.total-a.total).slice(0,5).map(x=>x.src);
+  const chanColors=['#1D9E75','#185FA5','#EF9F27','#D85A30','#993556'];
+ 
+  // ── CROSS-SELL POR SKU ─────────────────────────────────────
+  const crossSellMap={};
+  paid.forEach(o=>{
+    const prods=(o.products||[]).map(it=>getName(it.name)).filter(n=>!n.toLowerCase().includes('envío'));
+    if(prods.length<2)return;
+    prods.forEach(p=>{
+      if(!crossSellMap[p])crossSellMap[p]={};
+      prods.filter(q=>q!==p).forEach(q=>{
+        crossSellMap[p][q]=(crossSellMap[p][q]||0)+1;
+      });
+    });
+  });
+ 
+  // ── COSTO INVENTARIO INMOVILIZADO ──────────────────────────
+  const tc=FIN_TC||1400;
+  const lf=parseFloat(FIN_LANDED_FACTOR)||2.3;
+  const avgFOB2=FIN_COSTOS.length?FIN_COSTOS.reduce((s,c)=>s+c.fob,0)/FIN_COSTOS.length:0;
+  const avgLanded2=avgFOB2*tc*lf;
+  const totalStockUnits2=ALL_PRODUCTS.reduce((s,p)=>s+(p.variants?.[0]?.stock||0),0);
+  const stockValueARS=totalStockUnits2*avgLanded2;
+ 
+  // ── AT-RISK EMAIL EXPORT ───────────────────────────────────
+  window._atRiskEmails=atRisk.map(c=>c.email);
+  window._atRiskData=atRisk;
+ 
   // Signal card helper
   const signalClass=(val,goodThresh,warnThresh,higher=true)=>{
     if(val===null||val===undefined||isNaN(val))return'neutral';
@@ -690,7 +845,7 @@ function renderAll(){
         <div class="signal-label">Suscripción</div>
         <div class="signal-value">${subRevPct6m}%</div>
         <div class="signal-sub">${subRevPct6m>0?`${fmt(subRev6m)} de ${fmt(rev6m)} (6m)`:'Sin revenue por suscripción'}</div>
-        <span class="signal-rule ${subRevPct6m>0?'good':'neutral'}">${fmtN(activeSubLast30.length)} suscriptores activos</span>
+        <span class="signal-rule ${subRevPct6m>0?'good':'neutral'}">${fmtN(activeSubLast30.length)} activos · Nuevos: ${subNewThisMonth>0?'+':'' }${subNewDelta>=0?'<span style="color:#1D9E75">':'<span style="color:#D85A30">'}${subNewDelta>=0?'+':''}${subNewDelta}</span> vs mes ant.</span>
       </div>
  
     </div>
@@ -724,12 +879,62 @@ function renderAll(){
     <div class="month-selector">${recompraData.map(r=>`<button class="month-btn${r.k===SELECTED_RECOMPRA_MONTH?' active':''}" data-k="${r.k}" onclick="selectRecompraMonth('${r.k}')">${r.label} <span style="opacity:.7">${r.pct}%</span></button>`).join('')}</div>
     <div id="recompra-detail"></div>
     <div class="card" style="margin-top:12px"><div class="card-title">Resumen mensual</div><table class="tbl"><thead><tr><th>Mes</th><th>Compradores</th><th>Nuevos</th><th>Recurrentes</th><th>% Recompra</th></tr></thead><tbody>${recompraData.map(r=>`<tr><td style="font-weight:600">${r.label}</td><td>${fmtN(r.total)}</td><td style="color:#185FA5">${fmtN(r.nuevos)}</td><td style="color:#1D9E75">${fmtN(r.recurrentes)}</td><td><span style="font-weight:700;color:${r.pct>=30?'#1D9E75':r.pct>=15?'#EF9F27':'#D85A30'}">${r.pct}%</span></td></tr>`).join('')}</tbody></table></div>
+ 
+    <!-- COHORT DE RETENCIÓN -->
+    <div class="sec-label">Análisis de cohortes <span style="font-size:11px;font-weight:400;color:#999">— % de clientes nuevos que recompran en meses siguientes</span></div>
+    <div class="card" style="overflow-x:auto">
+      <div class="card-title">Cohorte de retención <span style="font-size:11px;font-weight:400;color:#999">Leé: de los N clientes nuevos de ese mes, cuántos volvieron a comprar</span></div>
+      ${cohortData.length===0?'<div class="empty">Sin datos suficientes</div>':`
+      <table class="cohort-table">
+        <thead>
+          <tr>
+            <th style="text-align:left">Cohorte</th>
+            <th>Nuevos clientes</th>
+            <th>Mes +1</th>
+            <th>Mes +2</th>
+            <th>Mes +3</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${cohortData.map(row=>{
+            const cellClass=pct=>pct>=30?'cohort-high':pct>=15?'cohort-mid':pct>=5?'cohort-low':'cohort-zero';
+            return `<tr>
+              <td class="cohort-label">${row.label}</td>
+              <td class="cohort-cell-0" style="color:#999">${fmtN(row.size)} <span style="font-size:10px">(100%)</span></td>
+              ${row.retention.map((r,i)=>`<td class="${cellClass(r)}">${r>0?r+'%':'—'}</td>`).join('')}
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      <div class="coverage-note" style="margin-top:10px">Verde ≥30% · Celeste ≥15% · Claro ≥5% · Gris = sin recompra en ese período</div>`}
+    </div>
   </div>
  
   <div id="sec-canales" class="section">
-    <div class="sec-label">Fuentes de tráfico y ventas</div>
+    <div class="sec-label">Fuentes de tráfico y ventas — total acumulado</div>
     <div class="card"><div class="chart-wrap" style="height:${Math.max(180,sortedUtm.length*40+60)}px"><canvas id="chartUtm"></canvas></div></div>
     <div class="card"><div class="card-title">Detalle por canal</div><table class="tbl"><thead><tr><th>Canal</th><th>Pedidos</th><th>Ingresos</th><th>Participación</th></tr></thead><tbody>${sortedUtm.map(([k,d])=>`<tr><td style="font-weight:600">${k}</td><td>${fmtN(d.orders)}</td><td>${fmt(d.rev)}</td><td><div style="display:flex;align-items:center;gap:6px"><div class="progress-wrap" style="width:60px"><div class="progress-bar" style="width:${Math.round(d.rev/maxUtmRev*100)}%"></div></div><span style="font-size:11px;color:#999">${Math.round(d.rev/maxUtmRev*100)}%</span></div></td></tr>`).join('')}</tbody></table></div>
+    <div class="sec-label">Evolución de canales — últimos 6 meses</div>
+    <div class="card">
+      <div class="card-title">Revenue por canal por mes</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+        ${topChannels.map((ch,i)=>`<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#666"><span style="width:8px;height:8px;border-radius:50%;background:${chanColors[i]};display:inline-block"></span>${ch}</span>`).join('')}
+      </div>
+      <div class="chart-wrap" style="height:220px"><canvas id="chartChannelEvol"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Participación % por canal por mes</div>
+      ${mLast6.map(k=>{
+        const mTotal=topChannels.reduce((s,ch)=>s+(channelEvol[ch]?.[k]?.rev||0),0)||1;
+        const label2=mNames[parseInt(k.split('-')[1])-1]+"'"+k.split('-')[0].slice(2);
+        return`<div style="margin-bottom:10px">
+          <div style="font-size:11px;color:#999;font-weight:600;margin-bottom:4px">${label2}</div>
+          <div style="display:flex;height:20px;border-radius:6px;overflow:hidden;gap:1px">
+            ${topChannels.map((ch,i)=>{const pct=Math.round((channelEvol[ch]?.[k]?.rev||0)/mTotal*100);return pct>0?`<div style="width:${pct}%;background:${chanColors[i]};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff">${pct>8?pct+'%':''}</div>`:'';}).join('')}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
   </div>
  
   <div id="sec-productos" class="section">
@@ -741,6 +946,26 @@ function renderAll(){
     <div class="card"><div class="chart-wrap" style="height:${Math.max(200,sortedSkus.slice(0,6).length*45+60)}px"><canvas id="chartProd"></canvas></div></div>
     <div class="sec-label">Productos comprados juntos</div>
     ${topPairs.length>0?`<div class="card"><div class="card-title">Combos naturales detectados <span style="font-size:11px;font-weight:400;color:#999">(misma orden)</span></div><table class="tbl"><thead><tr><th>Combinación</th><th>Veces juntos</th></tr></thead><tbody>${topPairs.map(([pair,cnt])=>`<tr><td>${pair.split(' + ').map(p=>`<span class="tag">${p.length>30?p.slice(0,30)+'…':p}</span>`).join(' ')}</td><td style="font-weight:600">${fmtN(cnt)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="card"><div class="empty">No hay suficientes órdenes con múltiples productos</div></div>'}
+    <div class="sec-label">Cross-sell por SKU <span style="font-size:11px;font-weight:400;color:#999">— qué compraron después clientes de cada producto</span></div>
+    <div class="card">
+      <div class="card-title">Segundo producto más comprado junto</div>
+      <table class="tbl">
+        <thead><tr><th>Si compró...</th><th>También compró</th><th>Veces</th></tr></thead>
+        <tbody>
+          ${sortedSkus.slice(0,10).map(([sku])=>{
+            const cs=crossSellMap[sku];
+            if(!cs)return'';
+            const top=Object.entries(cs).sort((a,b)=>b[1]-a[1]).slice(0,1)[0];
+            if(!top)return'';
+            return`<tr>
+              <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${sku.length>35?sku.slice(0,35)+'…':sku}</td>
+              <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#185FA5">${top[0].length>35?top[0].slice(0,35)+'…':top[0]}</td>
+              <td style="font-weight:600">${fmtN(top[1])}</td>
+            </tr>`;
+          }).filter(Boolean).join('')}
+        </tbody>
+      </table>
+    </div>
     <div class="sec-label">Detalle completo</div>
     <div class="card"><table class="tbl"><thead><tr><th>Producto</th><th>Formato</th><th>Uds.</th><th>Ticket prom.</th><th>Ingresos</th><th>%</th></tr></thead><tbody>${sortedSkus.map(([n,d])=>`<tr><td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n}</td><td style="color:#999;font-size:11px">${d.fmt}</td><td>${fmtN(d.qty)}</td><td>${fmt(d.orders?d.rev/d.orders:0)}</td><td>${fmt(d.rev)}</td><td><div style="display:flex;align-items:center;gap:6px"><div class="progress-wrap" style="width:40px"><div class="progress-bar" style="width:${Math.round(d.rev/maxRev*100)}%"></div></div><span style="font-size:11px;color:#999">${Math.round(d.rev/maxRev*100)}%</span></div></td></tr>`).join('')}</tbody></table></div>
   </div>
@@ -777,6 +1002,32 @@ function renderAll(){
     </div>
     <div class="sec-label">Clientes en riesgo de fuga <span style="font-size:11px;font-weight:400;color:#999">(sin compras hace 60–180 días)</span></div>
     ${atRisk.length===0?'<div class="card"><div class="empty">Sin clientes en riesgo actualmente</div></div>':`<div class="card"><table class="tbl"><thead><tr><th>Cliente</th><th>LTV</th><th>Pedidos</th><th>Días sin comprar</th><th>Prioridad</th></tr></thead><tbody>${atRisk.map(c=>{const days=Math.round((now-new Date(c.last))/(1000*3600*24));const pri=c.rev>avgLTV*2?'Alta':c.rev>avgLTV?'Media':'Normal';const priColor=pri==='Alta'?'#D85A30':pri==='Media'?'#EF9F27':'#999';return`<tr><td><div style="font-weight:600">${c.name}</div><div style="font-size:10px;color:#999;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.email}</div></td><td style="font-weight:600">${fmt(c.rev)}</td><td>${c.orders.length}</td><td style="color:${days>120?'#D85A30':'#EF9F27'};font-weight:600">${days}d</td><td style="color:${priColor};font-weight:600">${pri}</td></tr>`;}).join('')}</tbody></table></div>`}
+    <div class="sec-label">Frecuencia de compra</div>
+    <div class="card">
+      <div class="card-title">Distribución de clientes por número de compras</div>
+      ${Object.entries(freqBuckets).map(([label,count])=>`
+        <div class="freq-bar-wrap">
+          <span class="freq-label">${label}</span>
+          <div class="freq-bar">
+            <div class="freq-bar-fill" style="width:${Math.round(count/freqMax*100)}%">
+              ${Math.round(count/freqMax*100)>8?Math.round(count/custList.length*100)+'%':''}
+            </div>
+          </div>
+          <span class="freq-count">${fmtN(count)} (${Math.round(count/custList.length*100)}%)</span>
+        </div>`).join('')}
+      <div style="margin-top:12px;font-size:12px;color:#666;background:#f9f9f7;border-radius:8px;padding:10px 14px">
+        <strong>${Math.round((custList.filter(c=>c.orders.length>1).length/custList.length)*100)}%</strong> de los clientes recompró al menos una vez ·
+        <strong>${Math.round((custList.filter(c=>c.orders.length>=3).length/custList.length)*100)}%</strong> compró 3 o más veces
+      </div>
+    </div>
+ 
+    <div class="sec-label">Clientes en riesgo de fuga <span style="font-size:11px;font-weight:400;color:#999">(sin compras hace 60–180 días)</span></div>
+    ${atRisk.length===0?'<div class="card"><div class="empty">Sin clientes en riesgo actualmente</div></div>':`
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button class="btn-export" onclick="exportAtRiskEmails()">⬇ Exportar emails (${atRisk.length})</button>
+    </div>
+    <div class="card"><table class="tbl"><thead><tr><th>Cliente</th><th>LTV</th><th>Pedidos</th><th>Días sin comprar</th><th>Prioridad</th></tr></thead><tbody>${atRisk.map(c=>{const days=Math.round((now-new Date(c.last))/(1000*3600*24));const pri=c.rev>avgLTV*2?'Alta':c.rev>avgLTV?'Media':'Normal';const priColor=pri==='Alta'?'#D85A30':pri==='Media'?'#EF9F27':'#999';return`<tr><td><div style="font-weight:600">${c.name}</div><div style="font-size:10px;color:#999;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.email}</div></td><td style="font-weight:600">${fmt(c.rev)}</td><td>${c.orders.length}</td><td style="color:${days>120?'#D85A30':'#EF9F27'};font-weight:600">${days}d</td><td style="color:${priColor};font-weight:600">${pri}</td></tr>`;}).join('')}</tbody></table></div>`}
+ 
     <div class="sec-label">Top clientes por ingresos</div>
     <div class="card"><table class="tbl"><thead><tr><th>Cliente</th><th>Pedidos</th><th>Total</th><th>Última compra</th></tr></thead><tbody>${topCusts.map(c=>`<tr><td><div style="font-weight:600">${c.name}</div><div style="font-size:11px;color:#999;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.email}</div></td><td>${c.orders.length}</td><td style="font-weight:600">${fmt(c.rev)}</td><td style="color:#999">${new Date(c.last).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td></tr>`).join('')}</tbody></table></div>
   </div>
@@ -816,7 +1067,25 @@ function renderAll(){
     <div class="grid2">
       <div class="card"><div class="card-title">Proveedores de email</div><table class="tbl"><thead><tr><th>Dominio</th><th>Clientes</th><th>%</th></tr></thead><tbody>${demoData.topDomains.map(([dom,cnt])=>`<tr><td style="font-weight:500">@${dom}</td><td>${fmtN(cnt)}</td><td style="color:#999">${(cnt/demoData.total*100).toFixed(1)}%</td></tr>`).join('')}</tbody></table></div>
       <div class="card"><div class="card-title">Cobertura de datos</div>${[['Con email',demoData.total,demoData.total],['Con teléfono',demoData.withPhone,demoData.total],['Con identificación',demoData.withId,demoData.total],['Con provincia',demoData.topProvs.reduce((s,[,v])=>s+v.count,0),demoData.total],['Con ciudad',demoData.topCities.reduce((s,[,v])=>s+v.count,0),demoData.total]].map(([label,have,tot])=>`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>${label}</span><span style="color:#999">${fmtN(have)} (${(have/tot*100).toFixed(0)}%)</span></div><div class="progress-wrap"><div class="progress-bar" style="width:${Math.round(have/tot*100)}%"></div></div></div>`).join('')}</div>
-    </div>`:'<div class="empty">Sin datos suficientes.</div>'}
+    </div>
+    <div class="sec-label">Género × Producto <span style="font-size:11px;font-weight:400;color:#999">— qué compra cada género (por unidades)</span></div>
+    ${gxpSorted.length===0?'<div class="card"><div class="empty">Sin datos suficientes de género clasificado.</div></div>':`
+    <div class="card">
+      <div class="card-title">Distribución por género por producto</div>
+      <div style="display:flex;gap:16px;margin-bottom:14px"><span style="font-size:11px;color:#993556;font-weight:600">■ Mujeres</span><span style="font-size:11px;color:#185FA5;font-weight:600">■ Hombres</span></div>
+      ${gxpSorted.map(p=>`
+        <div class="gxp-row">
+          <span class="gxp-name" title="${p.name}">${p.name.length>35?p.name.slice(0,35)+'…':p.name}</span>
+          <div class="gxp-bar-wrap">
+            <div class="gxp-f" style="width:${p.pctF}%">${p.pctF>15?p.pctF+'%':''}</div>
+            <div class="gxp-m" style="width:${p.pctM}%">${p.pctM>15?p.pctM+'%':''}</div>
+          </div>
+          <span style="font-size:11px;color:#993556;min-width:32px;text-align:right">${p.pctF}%</span>
+          <span style="font-size:11px;color:#185FA5;min-width:32px;text-align:right">${p.pctM}%</span>
+        </div>`).join('')}
+      <div class="coverage-note" style="margin-top:12px">⚠ Solo incluye clientes con género clasificado por nombre. Resultados orientativos.</div>
+    </div>`}
+  `:'<div class="empty">Sin datos suficientes.</div>'}
   </div>
  
   <div id="sec-suscripciones" class="section">
@@ -835,7 +1104,31 @@ function renderAll(){
       <div class="card"><div class="card-title">Nuevos suscriptores por mes</div><div class="chart-wrap" style="height:160px"><canvas id="chartSubNew"></canvas></div></div>
       <div class="card"><div class="card-title">Top productos suscripción</div>${sortedSubSkus.length===0?'<div class="empty">Sin datos</div>':sortedSubSkus.map(([n,d])=>`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span style="max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n}</span><span style="color:#999">${fmt(d.rev)}</span></div><div class="progress-wrap"><div class="progress-bar" style="width:${Math.round(d.rev/Math.max(...sortedSubSkus.map(([,x])=>x.rev),1)*100)}%"></div></div></div>`).join('')}</div>
     </div>
-    <div class="card"><div class="card-title">Suscriptores</div><table class="tbl"><thead><tr><th>Cliente</th><th>Cobros</th><th>Total pagado</th><th>Último cobro</th><th>Estado</th></tr></thead><tbody>${[...subCustList].sort((a,b)=>b.rev-a.rev).slice(0,20).map(c=>{const days=(now-new Date(c.last))/(1000*3600*24),active=days<=45;return`<tr><td><div style="font-weight:600">${c.name}</div><div style="font-size:10px;color:#999;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.email}</div></td><td>${c.orders}</td><td style="font-weight:600">${fmt(c.rev)}</td><td style="color:#999">${new Date(c.last).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td><td>${active?'<span class="badge b-paid">Activo</span>':'<span class="badge b-cancelled">Churned</span>'}</td></tr>`;}).join('')}</tbody></table></div>`}
+    <!-- LTV Suscriptores vs No suscriptores -->
+    <div class="sec-label">LTV — Suscriptores vs No suscriptores</div>
+    <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
+      <div class="kpi" style="border-left:4px solid #1D9E75">
+        <div class="kpi-label">LTV promedio — Suscriptores</div>
+        <div class="kpi-value up">${fmt(avgLTVSub)}</div>
+        <div class="kpi-sub">${fmtN(subCusts.length)} clientes con suscripción</div>
+      </div>
+      <div class="kpi" style="border-left:4px solid #B4B2A9">
+        <div class="kpi-label">LTV promedio — Sin suscripción</div>
+        <div class="kpi-value">${fmt(avgLTVNoSub)}</div>
+        <div class="kpi-sub">${fmtN(noSubCusts.length)} clientes sin suscripción</div>
+      </div>
+      <div class="kpi" style="border-left:4px solid #185FA5">
+        <div class="kpi-label">Multiplicador LTV</div>
+        <div class="kpi-value" style="color:#185FA5">${ltvMultiplier}x</div>
+        <div class="kpi-sub">un suscriptor vale ${ltvMultiplier}x más</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Suscriptores</div>
+      <table class="tbl"><thead><tr><th>Cliente</th><th>Cobros</th><th>Total pagado</th><th>Último cobro</th><th>Estado</th></tr></thead>
+      <tbody>${[...subCustList].sort((a,b)=>b.rev-a.rev).slice(0,20).map(c=>{const days=(now-new Date(c.last))/(1000*3600*24),active=days<=45;return`<tr><td><div style="font-weight:600">${c.name}</div><div style="font-size:10px;color:#999;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.email}</div></td><td>${c.orders}</td><td style="font-weight:600">${fmt(c.rev)}</td><td style="color:#999">${new Date(c.last).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td><td>${active?'<span class="badge b-paid">Activo</span>':'<span class="badge b-cancelled">Churned</span>'}</td></tr>`;}).join('')}</tbody>
+      </table>
+    </div>`}
   </div>
  
   <div id="sec-pedidos" class="section">
@@ -856,6 +1149,7 @@ function renderAll(){
       <div class="kpi"><div class="kpi-label">Monto potencial</div><div class="kpi-value">${fmt(abandRev)}</div><div class="kpi-sub">en carritos sin cerrar</div></div>
       <div class="kpi"><div class="kpi-label">Promedio por carrito</div><div class="kpi-value">${ALL_ABANDONED.length?fmt(abandRev/ALL_ABANDONED.length):'—'}</div><div class="kpi-sub"> </div></div>
       <div class="kpi"><div class="kpi-label">Tasa abandono</div><div class="kpi-value">${(paid.length+ALL_ABANDONED.length)>0?((ALL_ABANDONED.length/(paid.length+ALL_ABANDONED.length))*100).toFixed(1)+'%':'—'}</div><div class="kpi-sub">vs pedidos pagados</div></div>
+      <div class="kpi"><div class="kpi-label">Recuperación estimada</div><div class="kpi-value" style="color:#1D9E75">${(()=>{const abandEmails=new Set(ALL_ABANDONED.map(c=>c.contact_email||c.customer?.email).filter(Boolean));const recovered=[...abandEmails].filter(e=>paid.some(o=>o.customer?.email===e||o.contact_email===e)).length;return abandEmails.size>0?(recovered/abandEmails.size*100).toFixed(1)+'%':'—';})()}</div><div class="kpi-sub">compraron después de abandonar</div></div>
     </div>
     <div class="card"><div class="card-title">Carritos abandonados recientes</div><table class="tbl"><thead><tr><th>Fecha</th><th>Cliente</th><th>Email</th><th>Monto</th><th>Productos</th></tr></thead><tbody>${[...ALL_ABANDONED].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,30).map(c=>`<tr><td style="color:#999;font-size:11px;white-space:nowrap">${new Date(c.created_at).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td><td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.contact_name||c.customer?.name||'—'}</td><td style="font-size:11px;color:#999;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.contact_email||c.customer?.email||'—'}</td><td style="font-weight:600">${fmt(parseFloat(c.total||c.subtotal||0))}</td><td style="color:#999;font-size:11px">${(c.products||[]).map(p=>getName(p.name)).slice(0,2).join(', ')}</td></tr>`).join('')}</tbody></table></div>`}
   </div>
@@ -874,6 +1168,10 @@ function renderAll(){
           <div class="kpi"><div class="kpi-label">Mktg / Revenue</div><div class="kpi-value" id="pl-kpi-mktg">—</div><div class="kpi-sub">% del total</div></div>
           <div class="kpi"><div class="kpi-label">Unidades vendidas</div><div class="kpi-value" id="pl-kpi-units">—</div><div class="kpi-sub">en el mes seleccionado</div></div>
           <div class="kpi"><div class="kpi-label">Precio prom. / ud.</div><div class="kpi-value" id="pl-kpi-avgprice">—</div><div class="kpi-sub">Revenue ÷ unidades</div></div>
+        </div>
+        <div class="card" style="margin-top:0">
+          <div class="card-title">Semáforo de salud financiera</div>
+          <div id="pl-health-content"></div>
         </div>
         <div class="card" style="margin-top:0">
           <div class="card-title">Evolución mensual</div>
@@ -1031,6 +1329,23 @@ function renderAll(){
       mkChart('chartMRR','bar',subMLabels,[{data:subMRR,backgroundColor:'#1D9E75',borderRadius:4,borderSkipped:false}],{scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},callback:tickY}}}});
       mkChart('chartSubNew','bar',subMLabels,[{data:subNew,backgroundColor:'#5DCAA5',borderRadius:4}],{scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},beginAtZero:true}}}});
     }
+    // Channel evolution chart
+    if(topChannels&&topChannels.length>0){
+      mkChart('chartChannelEvol','line',mLast6.map(k=>{const[y,mo]=k.split('-');return mNames[parseInt(mo)-1]+"'"+y.slice(2);}),
+        topChannels.map((ch,i)=>({
+          label:ch,
+          data:mLast6.map(k=>Math.round(channelEvol[ch]?.[k]?.rev||0)),
+          borderColor:chanColors[i],
+          backgroundColor:chanColors[i]+'22',
+          fill:false,
+          tension:.3,
+          pointRadius:3,
+          borderWidth:2,
+        })),
+        {scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},callback:tickY}}},
+         plugins:{legend:{display:true,position:'bottom',labels:{font:{size:11},boxWidth:10,padding:10}}}}
+      );
+    }
     if(demoData){
       mkChart('chartNewCusts','bar',demoData.newMonthLabels,[{data:demoData.newMonthVals,backgroundColor:'#1D9E75',borderRadius:4}],{scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{font:{size:11},beginAtZero:true}}}});
  
@@ -1173,6 +1488,32 @@ function renderFinPL(){
   if(el('pl-kpi-mktg'))el('pl-kpi-mktg').textContent=mktgPct+'%';
   if(el('pl-kpi-units'))el('pl-kpi-units').textContent=fmtN(unitsM);
   if(el('pl-kpi-avgprice'))el('pl-kpi-avgprice').textContent=avgPricePerUnit?fmt(avgPricePerUnit):'—';
+  // Semáforo de salud
+  const healthEl=el('pl-health-content');
+  if(healthEl){
+    const checks=[
+      {label:'Gross Margin',value:parseFloat(grossPct),good:60,warn:40,unit:'%',desc:'≥60% saludable'},
+      {label:'EBITDA',value:parseFloat(ebitdaPct),good:10,warn:0,unit:'%',desc:'≥10% muy bien · ≥0% ok'},
+      {label:'Mktg / Revenue',value:parseFloat(mktgPct),good:null,warn:30,unit:'%',desc:'<30% saludable',invert:true},
+      {label:'Revenue vs mes anterior',value:revL>0?parseFloat(((revTotal-revL)/revL*100).toFixed(1)):null,good:5,warn:0,unit:'%',desc:'crecimiento mensual'},
+    ];
+    healthEl.innerHTML=checks.map(ch=>{
+      const v=ch.value;
+      let status='neutral',color='#B4B2A9';
+      if(v!==null){
+        if(ch.invert){status=v<=ch.warn?'good':v<=40?'warn':'bad';color=v<=ch.warn?'#1D9E75':v<=40?'#EF9F27':'#D85A30';}
+        else{status=ch.good!==null&&v>=ch.good?'good':v>=ch.warn?'warn':'bad';color=ch.good!==null&&v>=ch.good?'#1D9E75':v>=ch.warn?'#EF9F27':'#D85A30';}
+      }
+      return`<div class="health-row">
+        <div style="display:flex;align-items:center;flex:1">
+          <div class="health-indicator health-${status==='good'?'green':status==='warn'?'yellow':status==='bad'?'red':'yellow'}" style="background:${color}"></div>
+          <span style="font-weight:600">${ch.label}</span>
+        </div>
+        <span style="font-weight:700;color:${color};font-size:15px">${v!==null?v+ch.unit:'—'}</span>
+        <span style="font-size:11px;color:#999;margin-left:12px;min-width:120px;text-align:right">${ch.desc}</span>
+      </div>`;
+    }).join('');
+  }
   const wf=el('pl-waterfall-container');
   if(wf)wf.innerHTML=`<div class="pl-waterfall">
     <div class="pl-row header"><span>Línea P&amp;L</span><span>ARS</span></div>
@@ -1210,7 +1551,33 @@ function renderFinPL(){
   const fcEl=el('pl-forecast-container');
   if(fcEl){
     const fMonths=allMonths().slice(-3).map(k=>{const[y,mo]=k.split('-');const nm=new Date(parseInt(y),parseInt(mo),1);return nm.getFullYear()+'-'+String(nm.getMonth()+1).padStart(2,'0');});
-    fcEl.innerHTML=`<div class="card"><div class="card-title">Forecast próximos 3 meses <span style="font-size:11px;font-weight:400;color:#999">(editable)</span></div><table class="tbl"><thead><tr><th>Concepto</th>${fMonths.map(k=>`<th>${mLabel(k)}</th>`).join('')}</tr></thead><tbody>${[['Revenue estimado','fc_rev'],['COGS estimado','fc_cogs'],['Marketing','fc_mktg'],['Gastos Op.','fc_opex'],['EBITDA forecast','fc_ebitda']].map(([label,prefix])=>`<tr><td style="font-weight:500">${label}</td>${fMonths.map(k=>{const val=FIN_FORECAST[k]?.[prefix]||'';return`<td><input class="mktg-input" type="number" placeholder="0" value="${val}" onchange="if(!FIN_FORECAST['${k}'])FIN_FORECAST['${k}']={};FIN_FORECAST['${k}']['${prefix}']=parseFloat(this.value)||0"></td>`;}).join('')}</tr>`).join('')}</tbody></table><button class="btn-primary" style="margin-top:12px" onclick="finSave('forecast',FIN_FORECAST);alert('Forecast guardado ✓')">Guardar forecast</button></div>`;
+    // Auto-fill forecast from 3m averages if empty
+    const last3=months.slice(-3);
+    const avgRevFC=last3.reduce((s,k)=>s+(b2c[k]||0)+(b2b[k]||0),0)/3;
+    const avgCogsFC=last3.reduce((s,k)=>s+(cogs[k]||0),0)/3;
+    const avgMktgFC=last3.reduce((s,k)=>s+(mktg[k]||0),0)/3;
+    const avgOpexFC=last3.reduce((s,k)=>s+(opex[k]||0),0)/3;
+    fMonths.forEach(k=>{
+      if(!FIN_FORECAST[k])FIN_FORECAST[k]={};
+      if(!FIN_FORECAST[k].fc_rev)FIN_FORECAST[k].fc_rev=Math.round(avgRevFC);
+      if(!FIN_FORECAST[k].fc_cogs)FIN_FORECAST[k].fc_cogs=Math.round(avgCogsFC);
+      if(!FIN_FORECAST[k].fc_mktg)FIN_FORECAST[k].fc_mktg=Math.round(avgMktgFC);
+      if(!FIN_FORECAST[k].fc_opex)FIN_FORECAST[k].fc_opex=Math.round(avgOpexFC);
+      if(!FIN_FORECAST[k].fc_ebitda)FIN_FORECAST[k].fc_ebitda=Math.round(avgRevFC-avgCogsFC-avgMktgFC-avgOpexFC);
+    });
+    fcEl.innerHTML=`<div class="card">
+      <div class="card-title">Forecast próximos 3 meses <span style="font-size:11px;font-weight:400;color:#999">(pre-completado con promedio últimos 3m — editable)</span></div>
+      <table class="tbl"><thead><tr><th>Concepto</th>${fMonths.map(k=>`<th>${mLabel(k)}</th>`).join('')}</tr></thead>
+      <tbody>${[['Revenue estimado','fc_rev'],['COGS estimado','fc_cogs'],['Marketing','fc_mktg'],['Gastos Op.','fc_opex'],['EBITDA forecast','fc_ebitda']].map(([label,prefix])=>`<tr>
+        <td style="font-weight:500">${label}</td>
+        ${fMonths.map(k=>{const val=FIN_FORECAST[k]?.[prefix]||0;const isEbitda=prefix==='fc_ebitda';return`<td><input class="mktg-input" type="number" placeholder="0" value="${val}" style="${isEbitda?'font-weight:700;color:'+(val>=0?'#1D9E75':'#D85A30'):''}" onchange="if(!FIN_FORECAST['${k}'])FIN_FORECAST['${k}']={};FIN_FORECAST['${k}']['${prefix}']=parseFloat(this.value)||0"></td>`;}).join('')}
+      </tr>`).join('')}</tbody></table>
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+        <button class="btn-primary" onclick="finSave('forecast',FIN_FORECAST);alert('Forecast guardado ✓')">Guardar forecast</button>
+        <button class="btn-secondary" onclick="Object.keys(FIN_FORECAST).forEach(k=>FIN_FORECAST[k]={});finSave('forecast',{});renderFinPL()">Resetear</button>
+        <span style="font-size:11px;color:#999">Promedio base: Rev ${fmt(Math.round(avgRevFC))} · Mktg ${fmt(Math.round(avgMktgFC))}</span>
+      </div>
+    </div>`;
   }
 }
  
@@ -1646,11 +2013,20 @@ function renderInventario(){
   const totalStockUnits=ALL_PRODUCTS.reduce((s,p)=>s+(p.variants?.[0]?.stock||0),0);
   const outOf=ALL_PRODUCTS.filter(p=>!p.variants?.[0]?.stock).length;
   const critical=ALL_PRODUCTS.filter(p=>{const s=p.variants?.[0]?.stock;return s>0&&s<=5;}).length;
+  // Costo inmovilizado
+  const invTC=FIN_TC||1400;
+  const invLF=parseFloat(FIN_LANDED_FACTOR)||2.3;
+  const invAvgFOB=FIN_COSTOS.length?FIN_COSTOS.reduce((s,x)=>s+x.fob,0)/FIN_COSTOS.length:0;
+  const invLandedUnit=invAvgFOB*invTC*invLF;
+  const invCapitalARS=totalStockUnits*invLandedUnit;
+  const invCapitalUSD=invAvgFOB>0?totalStockUnits*invAvgFOB:0;
   kpisEl.innerHTML=`
     <div class="kpi"><div class="kpi-label">Total unidades en stock</div><div class="kpi-value">${fmtN(totalStockUnits)}</div><div class="kpi-sub">según TiendaNube</div></div>
     <div class="kpi"><div class="kpi-label">SKUs sin stock</div><div class="kpi-value down">${outOf}</div><div class="kpi-sub">acción urgente</div></div>
     <div class="kpi"><div class="kpi-label">SKUs críticos</div><div class="kpi-value" style="color:#E65100">${critical}</div><div class="kpi-sub">1–5 uds</div></div>
-    <div class="kpi"><div class="kpi-label">Total SKUs</div><div class="kpi-value">${ALL_PRODUCTS.length}</div><div class="kpi-sub">en catálogo</div></div>`;
+    <div class="kpi"><div class="kpi-label">Total SKUs</div><div class="kpi-value">${ALL_PRODUCTS.length}</div><div class="kpi-sub">en catálogo</div></div>
+    <div class="kpi" style="border-left:3px solid #EF9F27"><div class="kpi-label">Capital inmovilizado</div><div class="kpi-value" style="font-size:18px">${fmt(invCapitalARS)}</div><div class="kpi-sub">Landed COGS · ${invCapitalUSD>0?'USD '+fmtN(invCapitalUSD)+' FOB':''}</div></div>
+    <div class="kpi" style="border-left:3px solid #185FA5"><div class="kpi-label">Costo landed / ud. prom.</div><div class="kpi-value" style="font-size:18px">${fmt(invLandedUnit)}</div><div class="kpi-sub">FOB USD ${invAvgFOB.toFixed(2)} × TC ${fmtN(invTC)} × ${invLF}x</div></div>`;
   const now=new Date();
   const last30=new Date(now);last30.setDate(now.getDate()-30);
   const skuSales={};
@@ -1805,6 +2181,23 @@ function renderFinances(){
   renderFinCostos();
   renderFinProv();
 }
+ 
+// ── EXPORT AT-RISK EMAILS ─────────────────────────────────
+window.exportAtRiskEmails=function(){
+  const data=window._atRiskData||[];
+  if(!data.length){alert('Sin clientes en riesgo');return;}
+  const csv='Email,Nombre,LTV,Pedidos,Días sin comprar\n'+
+    data.map(c=>{
+      const days=Math.round((new Date()-new Date(c.last))/(1000*3600*24));
+      return`${c.email},"${c.name}",${Math.round(c.rev)},${c.orders.length},${days}`;
+    }).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='bloom_clientes_riesgo.csv';
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+};
 </script>
 </body>
 </html>
